@@ -1,3 +1,4 @@
+const path = require('path');
 const commandsPath = path.join(__dirname, "commands");
 
 function getCommandFiles(dir) {
