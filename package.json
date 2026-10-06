@@ -1,10 +1,11 @@
 {
-  "name": "after-hours-discord-bot",
+  "name": "Bartender",
   "version": "1.0.0",
-  "description": "",
+  "description": "Discord bot for the After Hours server",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "deploy": "node deploy-commands.js"
   },
   "repository": {
     "type": "git",
@@ -17,9 +18,5 @@
   "bugs": {
     "url": "https://github.com/leannejwalker/Bartender/issues"
   },
-  "homepage": "https://github.com/leannejwalker/Bartender#readme",
-  "dependencies": {
-    "discord.js": "^14.27.0",
-    "dotenv": "^18.0.5"
-  }
+  "homepage": "https://github.com/leannejwalker/Bartender#readme"
 }
