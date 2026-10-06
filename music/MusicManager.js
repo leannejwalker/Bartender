@@ -7,7 +7,7 @@ const {
     StreamType
 } = require("@discordjs/voice");
 
-const play = require("play-dl");
+const play = require("@iamtraction/play-dl");
 
 class MusicManager {
     constructor() {
