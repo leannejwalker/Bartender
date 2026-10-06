@@ -65,11 +65,11 @@ const rest = new REST({
 async function deployCommands() {
     try {
         console.log(
-            `\n🚀 Deploying ${commands.length} command(s)...`
+            `\n🚀 Deploying ${commands.length} global command(s)...`
         );
 
         await rest.put(
-            Routes.applicationGuildCommands(
+            Routes.applicationCommands(
                 process.env.CLIENT_ID
             ),
             {
@@ -78,7 +78,7 @@ async function deployCommands() {
         );
 
         console.log(
-            `✅ Successfully deployed ${commands.length} command(s)!`
+            `✅ Successfully deployed ${commands.length} global command(s)!`
         );
     } catch (error) {
         console.error(
