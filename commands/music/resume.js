@@ -2,25 +2,30 @@ const {
     SlashCommandBuilder
 } = require("discord.js");
 
-const MusicManager = require("../../music/MusicManager");
+const musicManager =
+    require("../../music/MusicManager");
 
 module.exports = {
-    category: "Music",
-
     data: new SlashCommandBuilder()
         .setName("resume")
-        .setDescription("Resume the current song"),
+        .setDescription(
+            "Resume the current song"
+        ),
 
     async execute(interaction) {
-        const manager =
-            MusicManager.get(
+        const success =
+            musicManager.resume(
                 interaction.guild.id
             );
 
-        manager.resume();
+        if (!success) {
+            return interaction.reply(
+                "❌ Nothing is paused."
+            );
+        }
 
         await interaction.reply(
-            "▶️ Playback resumed."
+            "▶️ Resumed."
         );
     }
 };

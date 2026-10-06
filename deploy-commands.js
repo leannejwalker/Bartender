@@ -1,27 +1,45 @@
 require("dotenv").config();
 
-const fs = require("node:fs");
-const path = require("node:path");
+const fs = require("fs");
+const path = require("path");
+
 const {
     REST,
     Routes
 } = require("discord.js");
 
 const commands = [];
-const commandsPath = path.join(__dirname, "commands");
+
+const commandsPath =
+    path.join(
+        __dirname,
+        "commands"
+    );
 
 function getCommandFiles(dir) {
-    const entries = fs.readdirSync(dir, {
-        withFileTypes: true
-    });
+    const entries =
+        fs.readdirSync(
+            dir,
+            {
+                withFileTypes: true
+            }
+        );
 
     let files = [];
 
     for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
+        const fullPath =
+            path.join(
+                dir,
+                entry.name
+            );
 
         if (entry.isDirectory()) {
-            files = files.concat(getCommandFiles(fullPath));
+            files = files.concat(
+                getCommandFiles(
+                    fullPath
+                )
+            );
         } else if (
             entry.isFile() &&
             entry.name.endsWith(".js")
@@ -33,22 +51,35 @@ function getCommandFiles(dir) {
     return files;
 }
 
-const commandFiles = getCommandFiles(commandsPath);
+const commandFiles =
+    getCommandFiles(
+        commandsPath
+    );
 
 for (const filePath of commandFiles) {
     try {
-        const command = require(filePath);
+        const command =
+            require(filePath);
 
-        if (!command.data || !command.execute) {
-            console.warn(`⚠️ Invalid command: ${filePath}`);
+        if (
+            !command.data ||
+            !command.execute
+        ) {
+            console.warn(
+                `⚠️ Invalid command: ${filePath}`
+            );
+
             continue;
         }
 
-        commands.push(command.data.toJSON());
+        commands.push(
+            command.data.toJSON()
+        );
 
         console.log(
-            `📦 Found command: /${command.data.name}`
+            `📦 Found /${command.data.name}`
         );
+
     } catch (error) {
         console.error(
             `❌ Failed to load: ${filePath}`
@@ -58,14 +89,17 @@ for (const filePath of commandFiles) {
     }
 }
 
-const rest = new REST({
-    version: "10"
-}).setToken(process.env.DISCORD_TOKEN);
+const rest =
+    new REST({
+        version: "10"
+    }).setToken(
+        process.env.DISCORD_TOKEN
+    );
 
 async function deployCommands() {
     try {
         console.log(
-            `\n🚀 Deploying ${commands.length} global command(s)...`
+            `\n🚀 Deploying ${commands.length} command(s)...`
         );
 
         await rest.put(
@@ -78,8 +112,9 @@ async function deployCommands() {
         );
 
         console.log(
-            `✅ Successfully deployed ${commands.length} global command(s)!`
+            `✅ Successfully deployed ${commands.length} commands!`
         );
+
     } catch (error) {
         console.error(
             "❌ Failed to deploy commands:"

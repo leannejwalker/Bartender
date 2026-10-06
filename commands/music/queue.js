@@ -3,55 +3,65 @@ const {
     EmbedBuilder
 } = require("discord.js");
 
-const MusicManager = require("../../music/MusicManager");
+const musicManager =
+    require("../../music/MusicManager");
 
 module.exports = {
-    category: "Music",
-
     data: new SlashCommandBuilder()
         .setName("queue")
-        .setDescription("Show the current music queue"),
+        .setDescription(
+            "Show the music queue"
+        ),
 
     async execute(interaction) {
-        const manager =
-            MusicManager.get(
+        const data =
+            musicManager.get(
                 interaction.guild.id
             );
 
-        const lines = [];
-
-        if (manager.current) {
-            lines.push(
-                `🎵 **Now Playing**\n[${manager.current.title}](${manager.current.url})`
-            );
-        }
-
-        if (manager.queue.length) {
-            lines.push(
-                manager.queue
-                    .map(
-                        (track, index) =>
-                            `**${index + 1}.** [${track.title}](${track.url})`
-                    )
-                    .join("\n")
-            );
-        }
-
-        if (!lines.length) {
+        if (
+            !data.current &&
+            data.queue.length === 0
+        ) {
             return interaction.reply(
                 "📭 The queue is empty."
             );
         }
 
-        const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle("🎶 Music Queue")
-            .setDescription(
-                lines.join("\n\n")
-            )
-            .setFooter({
-                text: "After Hours • Bartender"
-            });
+        let description = "";
+
+        if (data.current) {
+            description +=
+                `🎵 **Now Playing**\n` +
+                `${data.current.title}\n\n`;
+        }
+
+        if (data.queue.length > 0) {
+            description +=
+                "**Up Next**\n";
+
+            description += data.queue
+                .slice(0, 10)
+                .map(
+                    (track, index) =>
+                        `\`${index + 1}.\` ${track.title}`
+                )
+                .join("\n");
+        }
+
+        const embed =
+            new EmbedBuilder()
+                .setColor(0x7c3aed)
+                .setTitle(
+                    "🎶 Music Queue"
+                )
+                .setDescription(
+                    description
+                )
+                .setFooter({
+                    text:
+                        `${data.queue.length} song(s) waiting`
+                });
 
         await interaction.reply({
             embeds: [embed]

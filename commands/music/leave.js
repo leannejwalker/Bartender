@@ -7,18 +7,18 @@ const musicManager =
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("stop")
+        .setName("leave")
         .setDescription(
-            "Stop music and clear the queue"
+            "Leave the voice channel"
         ),
 
     async execute(interaction) {
-        musicManager.stop(
+        musicManager.leave(
             interaction.guild.id
         );
 
         await interaction.reply(
-            "🛑 Music stopped and the queue was cleared."
+            "👋 Left the voice channel."
         );
     }
 };

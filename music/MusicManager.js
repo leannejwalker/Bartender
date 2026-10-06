@@ -4,247 +4,239 @@ const {
     createAudioResource,
     AudioPlayerStatus,
     NoSubscriberBehavior,
-    StreamType,
-    entersState,
-    VoiceConnectionStatus
+    StreamType
 } = require("@discordjs/voice");
 
 const play = require("play-dl");
 
-const queues = new Map();
-
 class MusicManager {
-    constructor(guildId) {
-        this.guildId = guildId;
-
-        this.queue = [];
-        this.current = null;
-
-        this.connection = null;
-        this.player = createAudioPlayer({
-            behaviors: {
-                noSubscriber: NoSubscriberBehavior.Play
-            }
-        });
-
-        this.volume = 100;
-        this.loop = false;
-
-        this.player.on(
-            AudioPlayerStatus.Idle,
-            async () => {
-                await this.playNext();
-            }
-        );
-
-        this.player.on("error", error => {
-            console.error(
-                `Music player error in ${this.guildId}:`,
-                error
-            );
-
-            this.playNext();
-        });
+    constructor() {
+        this.guilds = new Map();
     }
 
-    static get(guildId) {
-        if (!queues.has(guildId)) {
-            queues.set(
-                guildId,
-                new MusicManager(guildId)
-            );
+    get(guildId) {
+        if (!this.guilds.has(guildId)) {
+            const player = createAudioPlayer({
+                behaviors: {
+                    noSubscriber: NoSubscriberBehavior.Pause
+                }
+            });
+
+            const data = {
+                queue: [],
+                player,
+                connection: null,
+                current: null,
+                volume: 0.8,
+                loop: false,
+                textChannel: null,
+                nowPlayingMessage: null,
+                progressInterval: null
+            };
+
+            player.on(AudioPlayerStatus.Idle, async () => {
+                if (data.loop && data.current) {
+                    await this.playCurrent(guildId);
+                    return;
+                }
+
+                data.current = null;
+
+                if (data.queue.length > 0) {
+                    data.current = data.queue.shift();
+                    await this.playCurrent(guildId);
+                } else {
+                    this.stopProgress(guildId);
+                }
+            });
+
+            player.on("error", error => {
+                console.error("Music player error:", error);
+
+                data.current = null;
+
+                if (data.queue.length > 0) {
+                    data.current = data.queue.shift();
+                    this.playCurrent(guildId).catch(console.error);
+                }
+            });
+
+            this.guilds.set(guildId, data);
         }
 
-        return queues.get(guildId);
+        return this.guilds.get(guildId);
     }
 
-    join(channel) {
-        this.connection = joinVoiceChannel({
+    async connect(guild, channel) {
+        const data = this.get(guild.id);
+
+        data.connection = joinVoiceChannel({
             channelId: channel.id,
-            guildId: channel.guild.id,
-            adapterCreator:
-                channel.guild.voiceAdapterCreator,
+            guildId: guild.id,
+            adapterCreator: guild.voiceAdapterCreator,
             selfDeaf: true
         });
 
-        this.connection.subscribe(this.player);
+        data.connection.subscribe(data.player);
 
-        this.connection.on(
-            VoiceConnectionStatus.Disconnected,
-            async () => {
-                try {
-                    await Promise.race([
-                        entersState(
-                            this.connection,
-                            VoiceConnectionStatus.Signalling,
-                            5_000
-                        ),
-                        entersState(
-                            this.connection,
-                            VoiceConnectionStatus.Connecting,
-                            5_000
-                        )
-                    ]);
-                } catch {
-                    this.leave();
-                }
+        return data;
+    }
+
+    async add(guild, track) {
+        const data = this.get(guild.id);
+
+        data.queue.push(track);
+
+        if (!data.current) {
+            data.current = data.queue.shift();
+            await this.playCurrent(guild.id);
+        }
+
+        return data;
+    }
+
+    async playCurrent(guildId) {
+        const data = this.get(guildId);
+
+        if (!data.current) return;
+
+        const stream = await play.stream(data.current.url);
+
+        const resource = createAudioResource(stream.stream, {
+            inputType:
+                stream.type === "opus"
+                    ? StreamType.Opus
+                    : StreamType.WebmOpus,
+            inlineVolume: true
+        });
+
+        resource.volume.setVolume(data.volume);
+
+        data.player.play(resource);
+
+        this.startProgress(guildId);
+    }
+
+    pause(guildId) {
+        const data = this.get(guildId);
+        return data.player.pause();
+    }
+
+    resume(guildId) {
+        const data = this.get(guildId);
+        return data.player.unpause();
+    }
+
+    async skip(guildId) {
+        const data = this.get(guildId);
+
+        if (!data.current) return;
+
+        data.player.stop();
+    }
+
+    stop(guildId) {
+        const data = this.get(guildId);
+
+        data.queue = [];
+        data.current = null;
+        data.loop = false;
+
+        data.player.stop();
+
+        this.stopProgress(guildId);
+    }
+
+    setVolume(guildId, volume) {
+        const data = this.get(guildId);
+
+        data.volume = Math.max(0, Math.min(1, volume));
+
+        return data.volume;
+    }
+
+    toggleLoop(guildId) {
+        const data = this.get(guildId);
+
+        data.loop = !data.loop;
+
+        return data.loop;
+    }
+
+    shuffle(guildId) {
+        const data = this.get(guildId);
+
+        for (let i = data.queue.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+
+            [data.queue[i], data.queue[j]] =
+                [data.queue[j], data.queue[i]];
+        }
+    }
+
+    clear(guildId) {
+        const data = this.get(guildId);
+        data.queue = [];
+    }
+
+    getPosition(guildId) {
+        const data = this.get(guildId);
+
+        if (!data.current) return 0;
+
+        const state = data.player.state;
+
+        if (!state.resource) return 0;
+
+        return state.resource.playbackDuration || 0;
+    }
+
+    startProgress(guildId) {
+        const data = this.get(guildId);
+
+        this.stopProgress(guildId);
+
+        data.progressInterval = setInterval(async () => {
+            if (!data.nowPlayingMessage || !data.current) {
+                return;
             }
-        );
 
-        return this.connection;
-    }
+            try {
+                const { buildNowPlayingEmbed } =
+                    require("../commands/music/nowplaying");
 
-    async add(track) {
-        this.queue.push(track);
+                const embed = buildNowPlayingEmbed(guildId);
 
-        if (!this.current) {
-            await this.playNext();
-            return true;
-        }
-
-        return false;
-    }
-
-    async playNext() {
-        if (this.loop && this.current) {
-            await this.playTrack(this.current);
-            return;
-        }
-
-        const next = this.queue.shift();
-
-        if (!next) {
-            this.current = null;
-            return;
-        }
-
-        this.current = next;
-
-        await this.playTrack(next);
-    }
-
-    async playTrack(track) {
-        try {
-            const stream = await play.stream(
-                track.url,
-                {
-                    quality: 2,
-                    discordPlayerCompatibility: false
-                }
-            );
-
-            const resource = createAudioResource(
-                stream.stream,
-                {
-                    inputType:
-                        stream.type === "opus"
-                            ? StreamType.Opus
-                            : StreamType.WebmOpus,
-                    inlineVolume: true,
-                    metadata: track
-                }
-            );
-
-            if (resource.volume) {
-                resource.volume.setVolume(
-                    this.volume / 100
-                );
+                await data.nowPlayingMessage.edit({
+                    embeds: [embed]
+                });
+            } catch (error) {
+                console.error("Now playing update error:", error);
             }
+        }, 10000);
+    }
 
-            this.player.play(resource);
-        } catch (error) {
-            console.error(
-                `Failed to play ${track.title}:`,
-                error
-            );
+    stopProgress(guildId) {
+        const data = this.get(guildId);
 
-            this.current = null;
-
-            await this.playNext();
+        if (data.progressInterval) {
+            clearInterval(data.progressInterval);
+            data.progressInterval = null;
         }
     }
 
-    pause() {
-        return this.player.pause();
-    }
+    leave(guildId) {
+        const data = this.get(guildId);
 
-    resume() {
-        return this.player.unpause();
-    }
+        this.stop(guildId);
 
-    skip() {
-        return this.player.stop();
-    }
-
-    stop() {
-        this.queue = [];
-        this.current = null;
-        this.loop = false;
-
-        return this.player.stop();
-    }
-
-    setVolume(volume) {
-        this.volume = volume;
-
-        const resource =
-            this.player.state.resource;
-
-        if (resource?.volume) {
-            resource.volume.setVolume(
-                volume / 100
-            );
-        }
-    }
-
-    shuffle() {
-        for (
-            let i = this.queue.length - 1;
-            i > 0;
-            i--
-        ) {
-            const j = Math.floor(
-                Math.random() * (i + 1)
-            );
-
-            [
-                this.queue[i],
-                this.queue[j]
-            ] = [
-                this.queue[j],
-                this.queue[i]
-            ];
-        }
-    }
-
-    clear() {
-        this.queue = [];
-    }
-
-    remove(position) {
-        if (
-            position < 1 ||
-            position > this.queue.length
-        ) {
-            return null;
+        if (data.connection) {
+            data.connection.destroy();
+            data.connection = null;
         }
 
-        return this.queue.splice(
-            position - 1,
-            1
-        )[0];
-    }
-
-    leave() {
-        this.stop();
-
-        if (this.connection) {
-            this.connection.destroy();
-            this.connection = null;
-        }
-
-        queues.delete(this.guildId);
+        this.guilds.delete(guildId);
     }
 }
 
-module.exports = MusicManager;
+module.exports = new MusicManager();

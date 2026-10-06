@@ -7,25 +7,21 @@ const musicManager =
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("pause")
+        .setName("loop")
         .setDescription(
-            "Pause the current song"
+            "Toggle looping of the current song"
         ),
 
     async execute(interaction) {
-        const success =
-            musicManager.pause(
+        const enabled =
+            musicManager.toggleLoop(
                 interaction.guild.id
             );
 
-        if (!success) {
-            return interaction.reply(
-                "❌ Nothing is currently playing."
-            );
-        }
-
         await interaction.reply(
-            "⏸️ Paused."
+            enabled
+                ? "🔁 Loop enabled."
+                : "➡️ Loop disabled."
         );
     }
 };

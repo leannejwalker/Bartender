@@ -7,18 +7,18 @@ const musicManager =
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("stop")
+        .setName("shuffle")
         .setDescription(
-            "Stop music and clear the queue"
+            "Shuffle the music queue"
         ),
 
     async execute(interaction) {
-        musicManager.stop(
+        musicManager.shuffle(
             interaction.guild.id
         );
 
         await interaction.reply(
-            "🛑 Music stopped and the queue was cleared."
+            "🔀 Queue shuffled."
         );
     }
 };

@@ -1,38 +1,39 @@
 const {
-    SlashCommandBuilder,
-    EmbedBuilder
+    SlashCommandBuilder
 } = require("discord.js");
 
 const play = require("play-dl");
-const MusicManager = require("../../music/MusicManager");
+const musicManager = require("../../music/MusicManager");
 
 module.exports = {
-    category: "Music",
-
     data: new SlashCommandBuilder()
         .setName("play")
-        .setDescription("Play a YouTube video or search for a song")
+        .setDescription("Play a YouTube song")
         .addStringOption(option =>
             option
                 .setName("query")
-                .setDescription("YouTube URL or song name")
+                .setDescription(
+                    "YouTube URL or song name"
+                )
                 .setRequired(true)
         ),
 
     async execute(interaction) {
+        const query =
+            interaction.options.getString(
+                "query"
+            );
+
         const voiceChannel =
             interaction.member.voice.channel;
 
         if (!voiceChannel) {
             return interaction.reply({
                 content:
-                    "❌ You need to be in a voice channel first.",
+                    "❌ You need to join a voice channel first.",
                 ephemeral: true
             });
         }
-
-        const query =
-            interaction.options.getString("query");
 
         await interaction.deferReply();
 
@@ -40,17 +41,9 @@ module.exports = {
             let video;
 
             if (play.yt_validate(query) === "video") {
-                const info =
-                    await play.video_basic_info(query);
-
-                video = {
-                    title: info.video_details.title,
-                    url: info.video_details.url,
-                    duration:
-                        info.video_details.durationRaw,
-                    thumbnail:
-                        info.video_details.thumbnails?.[0]?.url
-                };
+                video = await play.video_basic_info(
+                    query
+                );
             } else {
                 const results =
                     await play.search(query, {
@@ -62,80 +55,56 @@ module.exports = {
 
                 if (!results.length) {
                     return interaction.editReply(
-                        "❌ I couldn't find that song."
+                        "❌ I couldn't find that song on YouTube."
                     );
                 }
 
-                const result = results[0];
-
-                video = {
-                    title: result.title,
-                    url: result.url,
-                    duration: result.durationRaw,
-                    thumbnail:
-                        result.thumbnails?.[0]?.url
-                };
+                video =
+                    await play.video_basic_info(
+                        results[0].url
+                    );
             }
 
-            const manager =
-                MusicManager.get(
-                    interaction.guild.id
+            const track = {
+                title: video.video_details.title,
+                url: video.video_details.url,
+                durationInSec:
+                    video.video_details.durationInSec,
+                thumbnail:
+                    video.video_details.thumbnails?.[0]?.url,
+                channel:
+                    video.video_details.channel?.name ||
+                    "YouTube",
+                requestedBy:
+                    interaction.user.toString()
+            };
+
+            const data =
+                await musicManager.connect(
+                    interaction.guild,
+                    voiceChannel
                 );
 
-            manager.join(voiceChannel);
+            data.textChannel =
+                interaction.channel;
 
-            const playing =
-                await manager.add({
-                    ...video,
-                    requestedBy:
-                        interaction.user.id
-                });
+            await musicManager.add(
+                interaction.guild,
+                track
+            );
 
-            const embed = new EmbedBuilder()
-                .setColor(0x5865F2)
-                .setTitle(
-                    playing
-                        ? "🎵 Now Playing"
-                        : "🎵 Added to Queue"
-                )
-                .setDescription(
-                    `[${video.title}](${video.url})`
-                )
-                .addFields({
-                    name: "Requested by",
-                    value: `<@${interaction.user.id}>`,
-                    inline: true
-                });
+            return interaction.editReply(
+                `🎵 Added **${track.title}** to the queue.`
+            );
 
-            if (video.duration) {
-                embed.addFields({
-                    name: "Duration",
-                    value: video.duration,
-                    inline: true
-                });
-            }
-
-            if (video.thumbnail) {
-                embed.setThumbnail(
-                    video.thumbnail
-                );
-            }
-
-            embed.setFooter({
-                text: "After Hours • Bartender"
-            });
-
-            await interaction.editReply({
-                embeds: [embed]
-            });
         } catch (error) {
             console.error(
                 "Play command error:",
                 error
             );
 
-            await interaction.editReply(
-                "❌ I couldn't play that track."
+            return interaction.editReply(
+                "❌ I couldn't play that YouTube video."
             );
         }
     }
