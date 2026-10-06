@@ -10,10 +10,6 @@ const {
 const commands = [];
 const commandsPath = path.join(__dirname, "commands");
 
-/* =========================
-   FIND COMMANDS RECURSIVELY
-========================= */
-
 function getCommandFiles(dir) {
     const entries = fs.readdirSync(dir, {
         withFileTypes: true
@@ -25,9 +21,7 @@ function getCommandFiles(dir) {
         const fullPath = path.join(dir, entry.name);
 
         if (entry.isDirectory()) {
-            files = files.concat(
-                getCommandFiles(fullPath)
-            );
+            files = files.concat(getCommandFiles(fullPath));
         } else if (
             entry.isFile() &&
             entry.name.endsWith(".js")
@@ -39,10 +33,6 @@ function getCommandFiles(dir) {
     return files;
 }
 
-/* =========================
-   LOAD COMMANDS
-========================= */
-
 const commandFiles = getCommandFiles(commandsPath);
 
 for (const filePath of commandFiles) {
@@ -50,9 +40,7 @@ for (const filePath of commandFiles) {
         const command = require(filePath);
 
         if (!command.data || !command.execute) {
-            console.warn(
-                `⚠️ Skipping invalid command: ${filePath}`
-            );
+            console.warn(`⚠️ Invalid command: ${filePath}`);
             continue;
         }
 
@@ -63,16 +51,12 @@ for (const filePath of commandFiles) {
         );
     } catch (error) {
         console.error(
-            `❌ Failed loading command: ${filePath}`
+            `❌ Failed to load: ${filePath}`
         );
 
         console.error(error);
     }
 }
-
-/* =========================
-   DEPLOY
-========================= */
 
 const rest = new REST({
     version: "10"
@@ -80,9 +64,8 @@ const rest = new REST({
 
 async function deployCommands() {
     try {
-        console.log("");
         console.log(
-            `🚀 Deploying ${commands.length} command(s)...`
+            `\n🚀 Deploying ${commands.length} command(s)...`
         );
 
         await rest.put(
@@ -95,16 +78,15 @@ async function deployCommands() {
             }
         );
 
-        console.log("");
         console.log(
             `✅ Successfully deployed ${commands.length} command(s)!`
         );
-        console.log("");
     } catch (error) {
-        console.error("");
-        console.error("❌ Failed to deploy commands:");
+        console.error(
+            "❌ Failed to deploy commands:"
+        );
+
         console.error(error);
-        console.error("");
     }
 }
 
