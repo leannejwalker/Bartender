@@ -9,6 +9,9 @@ const musicManager =
 
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
 
+const NODE_PATH =
+    "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
+
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {
         const process = spawn(

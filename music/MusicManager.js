@@ -11,13 +11,12 @@ const { spawn } = require("child_process");
 
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
 const FFMPEG_PATH = "/usr/bin/ffmpeg";
+const NODE_PATH =
+    "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
 
 const YTDLP_COMMON_ARGS = [
     "--js-runtimes",
-    "node",
-
-    "--remote-components",
-    "ejs:github",
+    `node:${NODE_PATH}`,
 
     "--no-playlist",
     "--no-warnings"
