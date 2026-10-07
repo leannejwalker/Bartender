@@ -3,6 +3,7 @@ const { spawn } = require("child_process");
 const musicManager = require("../../music/MusicManager");
 
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
+
 const NODE_PATH =
     "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
 
@@ -26,15 +27,13 @@ function runYtDlp(args) {
         let stdout = "";
         let stderr = "";
 
-        process.stdout.on(
-            "data",
-            chunk => stdout += chunk.toString()
-        );
+        process.stdout.on("data", chunk => {
+            stdout += chunk.toString();
+        });
 
-        process.stderr.on(
-            "data",
-            chunk => stderr += chunk.toString()
-        );
+        process.stderr.on("data", chunk => {
+            stderr += chunk.toString();
+        });
 
         process.on("error", reject);
 
@@ -46,7 +45,6 @@ function runYtDlp(args) {
                         `yt-dlp exited with code ${code}`
                     )
                 );
-
                 return;
             }
 
@@ -65,12 +63,57 @@ async function getVideoInfo(query) {
     const output = await runYtDlp([
         ...YTDLP_COMMON_ARGS,
         "--dump-single-json",
+        "--no-simulate",
         "-f",
         "bestaudio/best",
         target
     ]);
 
     return JSON.parse(output);
+}
+
+function getBestThumbnail(info) {
+    if (Array.isArray(info.thumbnails) && info.thumbnails.length > 0) {
+        const sorted = [...info.thumbnails].sort(
+            (a, b) =>
+                (b.width || 0) * (b.height || 0) -
+                (a.width || 0) * (a.height || 0)
+        );
+
+        for (const thumbnail of sorted) {
+            if (
+                thumbnail?.url &&
+                thumbnail.url.startsWith("http")
+            ) {
+                return thumbnail.url;
+            }
+        }
+    }
+
+    if (
+        info.thumbnail &&
+        typeof info.thumbnail === "string" &&
+        info.thumbnail.startsWith("http")
+    ) {
+        return info.thumbnail;
+    }
+
+    // YouTube's standard max-resolution thumbnail.
+    if (info.id) {
+        return `https://i.ytimg.com/vi/${info.id}/maxresdefault.jpg`;
+    }
+
+    return null;
+}
+
+function cleanTitle(title) {
+    if (!title) {
+        return "Unknown Track";
+    }
+
+    return String(title)
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
 module.exports = {
@@ -103,22 +146,13 @@ module.exports = {
         const query =
             interaction.options.getString("query");
 
-        /*
-         * --------------------------------------------------
-         * /play with NO query
-         * --------------------------------------------------
-         */
-
+        // /play with no query = resume/start queue
         if (!query) {
             const data =
                 musicManager.getGuildData(
                     interaction.guildId
                 );
 
-            /*
-             * If there is a current track and the player
-             * is paused, resume it.
-             */
             if (data.current) {
                 musicManager.connect(
                     interaction.guildId,
@@ -142,10 +176,6 @@ module.exports = {
                 }
             }
 
-            /*
-             * If there is something in the queue but
-             * nothing is currently playing, start it.
-             */
             if (
                 !data.current &&
                 data.queue.length > 0
@@ -176,43 +206,69 @@ module.exports = {
             });
         }
 
-        /*
-         * --------------------------------------------------
-         * /play WITH a query
-         * --------------------------------------------------
-         */
-
         await interaction.deferReply();
 
         try {
+            console.log(
+                `[Music] Searching YouTube for: ${query}`
+            );
+
             const info =
                 await getVideoInfo(query);
 
-            const track = {
-                title:
-                    info.title ||
-                    "Unknown title",
+            console.log(
+                `[Music] Found: ${info.title}`
+            );
 
-                url:
-                    info.webpage_url ||
-                    info.original_url ||
-                    query,
+            const title =
+                cleanTitle(info.title);
+
+            const url =
+                info.webpage_url ||
+                info.original_url ||
+                (
+                    info.id
+                        ? `https://www.youtube.com/watch?v=${info.id}`
+                        : query
+                );
+
+            const thumbnail =
+                getBestThumbnail(info);
+
+            const track = {
+                title,
+
+                url,
 
                 durationInSec:
                     Number(info.duration || 0),
 
-                thumbnail:
-                    info.thumbnail ||
-                    info.thumbnails?.[0]?.url,
+                thumbnail,
 
                 channel:
                     info.uploader ||
                     info.channel ||
+                    info.uploader_id ||
                     "YouTube",
 
                 requestedBy:
                     interaction.user.toString()
             };
+
+            console.log(
+                "[Music] Track metadata:",
+                JSON.stringify(
+                    {
+                        title: track.title,
+                        url: track.url,
+                        thumbnail: track.thumbnail,
+                        duration: track.durationInSec,
+                        channel: track.channel
+                    },
+                    null,
+                    2
+                )
+            );
 
             const data =
                 musicManager.getGuildData(
@@ -246,7 +302,6 @@ module.exports = {
                     `▶️ Now playing **${track.title}**`
                 );
             }
-
         } catch (error) {
             console.error(
                 "[Music] Play command error:",
@@ -264,7 +319,6 @@ module.exports = {
                 await interaction.editReply(
                     "❌ YouTube's verification challenge could not be solved."
                 );
-
                 return;
             }
 
