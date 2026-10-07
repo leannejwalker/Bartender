@@ -53,65 +53,105 @@ function runYtDlp(args) {
     });
 }
 
-async function getVideoInfo(query) {
-    const target =
-        query.startsWith("http://") ||
-        query.startsWith("https://")
-            ? query
-            : `ytsearch1:${query}`;
+async function searchYouTube(query) {
+    const output = await runYtDlp([
+        ...YTDLP_COMMON_ARGS,
+        "--flat-playlist",
+        "--dump-single-json",
+        "ytsearch1:" + query
+    ]);
 
+    const data = JSON.parse(output);
+
+    const entry =
+        data.entries?.[0];
+
+    if (!entry) {
+        throw new Error(
+            "No YouTube results were found."
+        );
+    }
+
+    return entry;
+}
+
+async function getVideoInfo(query) {
+    const isUrl =
+        query.startsWith("http://") ||
+        query.startsWith("https://");
+
+    // Direct YouTube URL
+    if (isUrl) {
+        const output = await runYtDlp([
+            ...YTDLP_COMMON_ARGS,
+            "--dump-single-json",
+            "-f",
+            "bestaudio/best",
+            query
+        ]);
+
+        return JSON.parse(output);
+    }
+
+    // Search YouTube
+    const result =
+        await searchYouTube(query);
+
+    const videoUrl =
+        result.webpage_url ||
+        result.url ||
+        (
+            result.id
+                ? `https://www.youtube.com/watch?v=${result.id}`
+                : null
+        );
+
+    if (!videoUrl) {
+        throw new Error(
+            "YouTube search returned a result without a video URL."
+        );
+    }
+
+    console.log(
+        `[Music] Search result: ${videoUrl}`
+    );
+
+    // Now fetch the REAL video metadata.
     const output = await runYtDlp([
         ...YTDLP_COMMON_ARGS,
         "--dump-single-json",
-        "--no-simulate",
         "-f",
         "bestaudio/best",
-        target
+        videoUrl
     ]);
 
     return JSON.parse(output);
 }
 
-function getBestThumbnail(info) {
-    if (Array.isArray(info.thumbnails) && info.thumbnails.length > 0) {
-        const sorted = [...info.thumbnails].sort(
-            (a, b) =>
-                (b.width || 0) * (b.height || 0) -
-                (a.width || 0) * (a.height || 0)
-        );
-
-        for (const thumbnail of sorted) {
-            if (
-                thumbnail?.url &&
-                thumbnail.url.startsWith("http")
-            ) {
-                return thumbnail.url;
-            }
-        }
+function getThumbnail(info) {
+    if (info.id) {
+        return `https://i.ytimg.com/vi/${info.id}/hqdefault.jpg`;
     }
 
     if (
-        info.thumbnail &&
         typeof info.thumbnail === "string" &&
         info.thumbnail.startsWith("http")
     ) {
         return info.thumbnail;
     }
 
-    // YouTube's standard max-resolution thumbnail.
-    if (info.id) {
-        return `https://i.ytimg.com/vi/${info.id}/maxresdefault.jpg`;
-    }
-
     return null;
 }
 
 function cleanTitle(title) {
-    if (!title) {
+    if (
+        typeof title !== "string" ||
+        !title.trim()
+    ) {
         return "Unknown Track";
     }
 
-    return String(title)
+    return title
         .replace(/\s+/g, " ")
         .trim();
 }
@@ -146,7 +186,7 @@ module.exports = {
         const query =
             interaction.options.getString("query");
 
-        // /play with no query = resume/start queue
+        // /play with no query
         if (!query) {
             const data =
                 musicManager.getGuildData(
@@ -220,35 +260,37 @@ module.exports = {
                 `[Music] Found: ${info.title}`
             );
 
-            const title =
-                cleanTitle(info.title);
-
-            const url =
+            const videoUrl =
                 info.webpage_url ||
                 info.original_url ||
                 (
                     info.id
                         ? `https://www.youtube.com/watch?v=${info.id}`
-                        : query
+                        : null
                 );
 
-            const thumbnail =
-                getBestThumbnail(info);
+            if (!videoUrl) {
+                throw new Error(
+                    "Could not determine the YouTube video URL."
+                );
+            }
 
             const track = {
-                title,
+                title:
+                    cleanTitle(info.title),
 
-                url,
+                url:
+                    videoUrl,
 
                 durationInSec:
                     Number(info.duration || 0),
 
-                thumbnail,
+                thumbnail:
+                    getThumbnail(info),
 
                 channel:
                     info.uploader ||
                     info.channel ||
-                    info.uploader_id ||
                     "YouTube",
 
                 requestedBy:
@@ -258,13 +300,7 @@ module.exports = {
             console.log(
                 "[Music] Track metadata:",
                 JSON.stringify(
-                    {
-                        title: track.title,
-                        url: track.url,
-                        thumbnail: track.thumbnail,
-                        duration: track.durationInSec,
-                        channel: track.channel
-                    },
+                    track,
                     null,
                     2
                 )
