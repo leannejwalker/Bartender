@@ -3,1010 +3,293 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-```
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
+<title>Bartender Dashboard</title>
+
+<link
+    rel="stylesheet"
+    href="/style.css"
 >
-
-<title>Bartender — Server Statistics</title>
-
-<style>
-    * {
-        box-sizing: border-box;
-    }
-
-    :root {
-        --bg: #0b0d12;
-        --panel: #131720;
-        --panel2: #191d27;
-        --border: #272d39;
-        --text: #f4f5f7;
-        --muted: #8d95a5;
-        --accent: #d6a85b;
-        --green: #54d18a;
-        --red: #ef6b73;
-    }
-
-    body {
-        margin: 0;
-        background:
-            radial-gradient(
-                circle at top right,
-                rgba(214, 168, 91, 0.08),
-                transparent 35%
-            ),
-            var(--bg);
-        color: var(--text);
-        font-family:
-            Inter,
-            system-ui,
-            -apple-system,
-            BlinkMacSystemFont,
-            "Segoe UI",
-            sans-serif;
-    }
-
-    .container {
-        width: min(1400px, 94%);
-        margin: 0 auto;
-    }
-
-    header {
-        padding: 32px 0 24px;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .header-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 20px;
-    }
-
-    .brand {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-    }
-
-    .logo {
-        width: 52px;
-        height: 52px;
-        display: grid;
-        place-items: center;
-        border-radius: 14px;
-        background: var(--panel2);
-        border: 1px solid var(--border);
-        font-size: 28px;
-    }
-
-    h1 {
-        margin: 0;
-        font-size: 28px;
-    }
-
-    .subtitle {
-        margin-top: 5px;
-        color: var(--muted);
-        font-size: 14px;
-    }
-
-    .status {
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        padding: 9px 13px;
-        border-radius: 999px;
-        background: var(--panel);
-        border: 1px solid var(--border);
-        font-size: 13px;
-    }
-
-    .status-dot {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: var(--red);
-    }
-
-    .status.online .status-dot {
-        background: var(--green);
-        box-shadow:
-            0 0 12px
-            rgba(84, 209, 138, 0.65);
-    }
-
-    main {
-        padding: 28px 0 50px;
-    }
-
-    .cards {
-        display: grid;
-        grid-template-columns:
-            repeat(4, minmax(0, 1fr));
-        gap: 16px;
-    }
-
-    .card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 22px;
-    }
-
-    .card-label {
-        color: var(--muted);
-        font-size: 13px;
-        margin-bottom: 9px;
-    }
-
-    .card-value {
-        font-size: 30px;
-        font-weight: 700;
-    }
-
-    .section {
-        margin-top: 22px;
-    }
-
-    .section-grid {
-        display: grid;
-        grid-template-columns:
-            repeat(2, minmax(0, 1fr));
-        gap: 18px;
-    }
-
-    .panel {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        overflow: hidden;
-    }
-
-    .panel-header {
-        padding: 18px 20px;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .panel-title {
-        font-size: 16px;
-        font-weight: 650;
-    }
-
-    .panel-subtitle {
-        color: var(--muted);
-        font-size: 12px;
-        margin-top: 4px;
-    }
-
-    .panel-body {
-        padding: 20px;
-    }
-
-    canvas {
-        width: 100%;
-        height: 260px;
-        display: block;
-    }
-
-    .list {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .list-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 15px;
-        padding: 12px 13px;
-        border-radius: 10px;
-        background: var(--panel2);
-    }
-
-    .list-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .list-value {
-        color: var(--accent);
-        font-weight: 650;
-        white-space: nowrap;
-    }
-
-    .member-event {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 11px 0;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .member-event:last-child {
-        border-bottom: 0;
-    }
-
-    .event-icon {
-        width: 34px;
-        height: 34px;
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-        background: var(--panel2);
-    }
-
-    .event-text {
-        flex: 1;
-    }
-
-    .event-name {
-        font-weight: 600;
-    }
-
-    .event-time {
-        color: var(--muted);
-        font-size: 12px;
-        margin-top: 3px;
-    }
-
-    .join {
-        color: var(--green);
-    }
-
-    .leave {
-        color: var(--red);
-    }
-
-    .empty {
-        color: var(--muted);
-        padding: 20px 0;
-        text-align: center;
-    }
-
-    .footer {
-        padding: 25px 0 35px;
-        text-align: center;
-        color: var(--muted);
-        font-size: 12px;
-    }
-
-    @media (max-width: 900px) {
-        .cards {
-            grid-template-columns:
-                repeat(2, minmax(0, 1fr));
-        }
-
-        .section-grid {
-            grid-template-columns: 1fr;
-        }
-    }
-
-    @media (max-width: 550px) {
-        .header-row {
-            align-items: flex-start;
-            flex-direction: column;
-        }
-
-        .cards {
-            grid-template-columns: 1fr;
-        }
-
-        .card-value {
-            font-size: 26px;
-        }
-    }
-</style>
-```
 
 </head>
 
 <body>
 
-<header>
-    <div class="container header-row">
-
 ```
-    <div class="brand">
-        <div class="logo">🍺</div>
+<div class="app">
 
+    <header class="topbar">
         <div>
-            <h1>Bartender</h1>
-            <div
-                class="subtitle"
-                id="serverName"
-            >
-                Server statistics
+            <div class="brand">
+                🍺 Bartender
             </div>
-        </div>
-    </div>
 
-    <div
-        class="status"
-        id="status"
-    >
-        <span class="status-dot"></span>
-        <span id="statusText">
-            Checking status...
-        </span>
-    </div>
-
-</div>
-```
-
-</header>
-
-<main class="container">
-
-```
-<section class="cards">
-
-    <div class="card">
-        <div class="card-label">
-            Members
+            <div class="subtitle">
+                Server Statistics Dashboard
+            </div>
         </div>
 
         <div
-            class="card-value"
-            id="members"
+            id="botStatus"
+            class="status offline"
         >
-            —
+            <span class="status-dot"></span>
+            Offline
         </div>
-    </div>
+    </header>
 
-    <div class="card">
-        <div class="card-label">
-            Online
-        </div>
 
-        <div
-            class="card-value"
-            id="onlineMembers"
-        >
-            —
-        </div>
-    </div>
+    <main class="container">
 
-    <div class="card">
-        <div class="card-label">
-            Messages
-        </div>
+        <section class="hero">
+            <h1>Server Overview</h1>
 
-        <div
-            class="card-value"
-            id="messages"
-        >
-            —
-        </div>
-    </div>
+            <p>
+                Live statistics and activity for your Discord server.
+            </p>
+        </section>
 
-    <div class="card">
-        <div class="card-label">
-            Commands
-        </div>
 
-        <div
-            class="card-value"
-            id="commands"
-        >
-            —
-        </div>
-    </div>
+        <!-- STAT CARDS -->
 
-</section>
+        <section class="stats-grid">
 
-<section class="section">
-
-    <div class="panel">
-
-        <div class="panel-header">
-            <div class="panel-title">
-                Server Activity
-            </div>
-
-            <div class="panel-subtitle">
-                Last 30 days
-            </div>
-        </div>
-
-        <div class="panel-body">
-            <canvas
-                id="activityChart"
-            ></canvas>
-        </div>
-
-    </div>
-
-</section>
-
-<section class="section section-grid">
-
-    <div class="panel">
-
-        <div class="panel-header">
-            <div class="panel-title">
-                Most Used Commands
-            </div>
-        </div>
-
-        <div class="panel-body">
-            <div
-                class="list"
-                id="commandsList"
-            ></div>
-        </div>
-
-    </div>
-
-    <div class="panel">
-
-        <div class="panel-header">
-            <div class="panel-title">
-                Most Active Channels
-            </div>
-        </div>
-
-        <div class="panel-body">
-            <div
-                class="list"
-                id="channelsList"
-            ></div>
-        </div>
-
-    </div>
-
-</section>
-
-<section class="section section-grid">
-
-    <div class="panel">
-
-        <div class="panel-header">
-            <div class="panel-title">
-                Most Active Members
-            </div>
-        </div>
-
-        <div class="panel-body">
-            <div
-                class="list"
-                id="usersList"
-            ></div>
-        </div>
-
-    </div>
-
-    <div class="panel">
-
-        <div class="panel-header">
-            <div class="panel-title">
-                Recent Member Activity
-            </div>
-        </div>
-
-        <div
-            class="panel-body"
-            id="membersList"
-        ></div>
-
-    </div>
-
-</section>
-
-<section class="section section-grid">
-
-    <div class="card">
-        <div class="card-label">
-            Songs Played
-        </div>
-
-        <div
-            class="card-value"
-            id="songs"
-        >
-            —
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-label">
-            Moderation Actions
-        </div>
-
-        <div
-            class="card-value"
-            id="moderation"
-        >
-            —
-        </div>
-    </div>
-
-</section>
-```
-
-</main>
-
-<div class="container footer">
-    Bartender statistics · Updates automatically
-</div>
-
-<script>
-    const numberFormat =
-        new Intl.NumberFormat();
-
-    function formatNumber(value) {
-        return numberFormat.format(
-            Number(value) || 0
-        );
-    }
-
-    async function fetchJson(url) {
-        const response =
-            await fetch(url);
-
-        if (!response.ok) {
-            throw new Error(
-                `HTTP ${response.status}`
-            );
-        }
-
-        return response.json();
-    }
-
-    function renderList(
-        elementId,
-        items,
-        nameFunction,
-        valueFunction
-    ) {
-        const element =
-            document.getElementById(
-                elementId
-            );
-
-        if (!items.length) {
-            element.innerHTML =
-                `<div class="empty">
-                    No data yet
-                </div>`;
-
-            return;
-        }
-
-        element.innerHTML =
-            items.map(item => `
-                <div class="list-row">
-                    <span class="list-name">
-                        ${escapeHtml(
-                            nameFunction(item)
-                        )}
-                    </span>
-
-                    <span class="list-value">
-                        ${formatNumber(
-                            valueFunction(item)
-                        )}
-                    </span>
+            <div class="stat-card">
+                <div class="stat-label">
+                    Members
                 </div>
-            `).join("");
-    }
 
-    function escapeHtml(value) {
-        return String(value ?? "")
-            .replaceAll("&", "&amp;")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;")
-            .replaceAll('"', "&quot;")
-            .replaceAll("'", "&#039;");
-    }
+                <div
+                    id="members"
+                    class="stat-value"
+                >
+                    —
+                </div>
+            </div>
 
-    function renderMembers(events) {
-        const element =
-            document.getElementById(
-                "membersList"
-            );
 
-        if (!events.length) {
-            element.innerHTML =
-                `<div class="empty">
-                    No member events yet
-                </div>`;
+            <div class="stat-card">
+                <div class="stat-label">
+                    Online
+                </div>
 
-            return;
-        }
+                <div
+                    id="onlineMembers"
+                    class="stat-value"
+                >
+                    —
+                </div>
+            </div>
 
-        element.innerHTML =
-            events.map(event => {
 
-                const isJoin =
-                    event.event === "join";
+            <div class="stat-card">
+                <div class="stat-label">
+                    Messages
+                </div>
 
-                const icon =
-                    isJoin ? "＋" : "−";
+                <div
+                    id="messages"
+                    class="stat-value"
+                >
+                    —
+                </div>
+            </div>
 
-                const time =
-                    new Date(
-                        event.created_at
-                    ).toLocaleString();
 
-                return `
-                    <div class="member-event">
+            <div class="stat-card">
+                <div class="stat-label">
+                    Commands
+                </div>
 
-                        <div
-                            class="event-icon ${
-                                isJoin
-                                    ? "join"
-                                    : "leave"
-                            }"
-                        >
-                            ${icon}
-                        </div>
+                <div
+                    id="commands"
+                    class="stat-value"
+                >
+                    —
+                </div>
+            </div>
 
-                        <div class="event-text">
-                            <div class="event-name">
-                                ${escapeHtml(
-                                    event.username
-                                )}
-                            </div>
+        </section>
 
-                            <div class="event-time">
-                                ${
-                                    isJoin
-                                        ? "Joined"
-                                        : "Left"
-                                }
-                                · ${escapeHtml(time)}
-                            </div>
-                        </div>
 
+        <!-- ACTIVITY -->
+
+        <section class="panel">
+
+            <div class="panel-header">
+                <div>
+                    <h2>Server Activity</h2>
+
+                    <p>
+                        Messages and commands over the last 30 days.
+                    </p>
+                </div>
+            </div>
+
+            <div class="chart-wrapper">
+                <canvas id="activityChart"></canvas>
+            </div>
+
+        </section>
+
+
+        <!-- THREE COLUMNS -->
+
+        <section class="three-column">
+
+            <div class="panel">
+
+                <div class="panel-header">
+                    <h2>Most Used Commands</h2>
+                </div>
+
+                <div
+                    id="commandList"
+                    class="list"
+                >
+                    Loading...
+                </div>
+
+            </div>
+
+
+            <div class="panel">
+
+                <div class="panel-header">
+                    <h2>Most Active Channels</h2>
+                </div>
+
+                <div
+                    id="channelList"
+                    class="list"
+                >
+                    Loading...
+                </div>
+
+            </div>
+
+
+            <div class="panel">
+
+                <div class="panel-header">
+                    <h2>Most Active Members</h2>
+                </div>
+
+                <div
+                    id="userList"
+                    class="list"
+                >
+                    Loading...
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- LOWER GRID -->
+
+        <section class="two-column">
+
+            <div class="panel">
+
+                <div class="panel-header">
+                    <div>
+                        <h2>Member Activity</h2>
+
+                        <p>
+                            Recent joins and leaves.
+                        </p>
                     </div>
-                `;
-            }).join("");
-    }
+                </div>
 
-    function drawChart(data) {
-        const canvas =
-            document.getElementById(
-                "activityChart"
-            );
+                <div
+                    id="memberEvents"
+                    class="events"
+                >
+                    Loading...
+                </div>
 
-        const rect =
-            canvas.getBoundingClientRect();
+            </div>
 
-        const dpr =
-            window.devicePixelRatio || 1;
 
-        canvas.width =
-            rect.width * dpr;
+            <div class="panel">
 
-        canvas.height =
-            rect.height * dpr;
+                <div class="panel-header">
+                    <div>
+                        <h2>Bartender Statistics</h2>
 
-        const ctx =
-            canvas.getContext("2d");
+                        <p>
+                            Bot activity since startup.
+                        </p>
+                    </div>
+                </div>
 
-        ctx.scale(dpr, dpr);
+                <div class="bot-stats">
 
-        const width =
-            rect.width;
+                    <div class="bot-stat">
+                        <span>
+                            Songs Played
+                        </span>
 
-        const height =
-            rect.height;
+                        <strong id="songsPlayed">
+                            —
+                        </strong>
+                    </div>
 
-        ctx.clearRect(
-            0,
-            0,
-            width,
-            height
-        );
 
-        if (!data.length) {
-            ctx.fillStyle = "#8d95a5";
-            ctx.font = "14px system-ui";
-            ctx.textAlign = "center";
+                    <div class="bot-stat">
+                        <span>
+                            Moderation Actions
+                        </span>
 
-            ctx.fillText(
-                "No activity data yet",
-                width / 2,
-                height / 2
-            );
+                        <strong id="modActions">
+                            —
+                        </strong>
+                    </div>
 
-            return;
-        }
 
-        const values =
-            data.flatMap(item => [
-                Number(item.messages) || 0,
-                Number(item.commands) || 0
-            ]);
+                    <div class="bot-stat">
+                        <span>
+                            Bot Uptime
+                        </span>
 
-        const maxValue =
-            Math.max(
-                1,
-                ...values
-            );
+                        <strong id="uptime">
+                            —
+                        </strong>
+                    </div>
 
-        const padding = 35;
 
-        const chartWidth =
-            width - padding * 2;
+                    <div class="bot-stat">
+                        <span>
+                            Voice Channel
+                        </span>
 
-        const chartHeight =
-            height - padding * 2;
+                        <strong id="voiceChannel">
+                            Not connected
+                        </strong>
+                    </div>
 
-        function x(index) {
-            if (data.length === 1) {
-                return width / 2;
-            }
+                </div>
 
-            return padding +
-                (
-                    index /
-                    (data.length - 1)
-                ) *
-                chartWidth;
-        }
+            </div>
 
-        function y(value) {
-            return height -
-                padding -
-                (
-                    value /
-                    maxValue
-                ) *
-                chartHeight;
-        }
+        </section>
 
-        ctx.strokeStyle =
-            "#272d39";
 
-        ctx.lineWidth = 1;
+        <footer>
+            Bartender • Discord Server Statistics
+        </footer>
 
-        for (let i = 0; i <= 4; i++) {
-            const lineY =
-                padding +
-                (
-                    i / 4
-                ) *
-                chartHeight;
+    </main>
+</div>
 
-            ctx.beginPath();
-            ctx.moveTo(
-                padding,
-                lineY
-            );
-            ctx.lineTo(
-                width - padding,
-                lineY
-            );
-            ctx.stroke();
-        }
 
-        function drawLine(
-            key,
-            lineWidth
-        ) {
-            ctx.beginPath();
-
-            data.forEach(
-                (item, index) => {
-
-                    const pointX =
-                        x(index);
-
-                    const pointY =
-                        y(
-                            Number(
-                                item[key]
-                            ) || 0
-                        );
-
-                    if (index === 0) {
-                        ctx.moveTo(
-                            pointX,
-                            pointY
-                        );
-                    } else {
-                        ctx.lineTo(
-                            pointX,
-                            pointY
-                        );
-                    }
-                }
-            );
-
-            ctx.strokeStyle =
-                lineWidth === 3
-                    ? "#d6a85b"
-                    : "#8d95a5";
-
-            ctx.lineWidth =
-                lineWidth;
-
-            ctx.stroke();
-        }
-
-        drawLine(
-            "messages",
-            3
-        );
-
-        drawLine(
-            "commands",
-            2
-        );
-    }
-
-    async function loadDashboard() {
-        try {
-            const [
-                overview,
-                daily,
-                commands,
-                channels,
-                users,
-                members,
-                status
-            ] = await Promise.all([
-                fetchJson(
-                    "/api/stats/overview"
-                ),
-
-                fetchJson(
-                    "/api/stats/daily?days=30"
-                ),
-
-                fetchJson(
-                    "/api/stats/commands"
-                ),
-
-                fetchJson(
-                    "/api/stats/channels"
-                ),
-
-                fetchJson(
-                    "/api/stats/users"
-                ),
-
-                fetchJson(
-                    "/api/stats/members"
-                ),
-
-                fetchJson(
-                    "/api/status"
-                )
-            ]);
-
-            document.getElementById(
-                "members"
-            ).textContent =
-                formatNumber(
-                    overview.members
-                );
-
-            document.getElementById(
-                "onlineMembers"
-            ).textContent =
-                formatNumber(
-                    overview.onlineMembers
-                );
-
-            document.getElementById(
-                "messages"
-            ).textContent =
-                formatNumber(
-                    overview.total_messages
-                );
-
-            document.getElementById(
-                "commands"
-            ).textContent =
-                formatNumber(
-                    overview.total_commands
-                );
-
-            document.getElementById(
-                "songs"
-            ).textContent =
-                formatNumber(
-                    overview.total_songs_played
-                );
-
-            document.getElementById(
-                "moderation"
-            ).textContent =
-                formatNumber(
-                    overview.total_mod_actions
-                );
-
-            document.getElementById(
-                "serverName"
-            ).textContent =
-                status.guild
-                    ? status.guild.name
-                    : "Discord server";
-
-            const statusElement =
-                document.getElementById(
-                    "status"
-                );
-
-            const statusText =
-                document.getElementById(
-                    "statusText"
-                );
-
-            if (status.online) {
-                statusElement.classList.add(
-                    "online"
-                );
-
-                statusText.textContent =
-                    "Bartender online";
-            } else {
-                statusElement.classList.remove(
-                    "online"
-                );
-
-                statusText.textContent =
-                    "Bartender offline";
-            }
-
-            renderList(
-                "commandsList",
-                commands,
-                item => "/" + item.command,
-                item => item.uses
-            );
-
-            renderList(
-                "channelsList",
-                channels,
-                item => "#" + item.channel_name,
-                item => item.messages
-            );
-
-            renderList(
-                "usersList",
-                users,
-                item => item.username,
-                item => item.messages
-            );
-
-            renderMembers(
-                members
-            );
-
-            drawChart(
-                [...daily].reverse()
-            );
-
-        } catch (error) {
-            console.error(
-                "Dashboard error:",
-                error
-            );
-        }
-    }
-
-    loadDashboard();
-
-    setInterval(
-        loadDashboard,
-        30000
-    );
-
-    window.addEventListener(
-        "resize",
-        () => {
-            loadDashboard();
-        }
-    );
-</script>
+<script src="/app.js"></script>
 
 </body>
 </html>
