@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+
 const {
     Client,
     Collection,
@@ -8,10 +9,16 @@ const {
 
 require("dotenv").config();
 
+const statsManager =
+    require("./database/StatsManager");
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
     ]
 });
 
@@ -96,14 +103,86 @@ for (const filePath of commandFiles) {
     }
 }
 
+
+/*
+ * BOT READY
+ */
+
 client.once(
     "ready",
     () => {
         console.log(
             `🍺 Bartender online as ${client.user.tag}`
         );
+
+        console.log(
+            `📊 Statistics database connected.`
+        );
     }
 );
+
+
+/*
+ * MESSAGE STATISTICS
+ */
+
+client.on(
+    "messageCreate",
+    message => {
+        try {
+            statsManager.recordMessage(
+                message
+            );
+        } catch (error) {
+            console.error(
+                "[Stats] Message tracking error:",
+                error
+            );
+        }
+    }
+);
+
+
+/*
+ * MEMBER STATISTICS
+ */
+
+client.on(
+    "guildMemberAdd",
+    member => {
+        try {
+            statsManager.recordMemberJoin(
+                member
+            );
+        } catch (error) {
+            console.error(
+                "[Stats] Member join tracking error:",
+                error
+            );
+        }
+    }
+);
+
+client.on(
+    "guildMemberRemove",
+    member => {
+        try {
+            statsManager.recordMemberLeave(
+                member
+            );
+        } catch (error) {
+            console.error(
+                "[Stats] Member leave tracking error:",
+                error
+            );
+        }
+    }
+);
+
+
+/*
+ * INTERACTIONS
+ */
 
 client.on(
     "interactionCreate",
@@ -140,6 +219,7 @@ client.on(
 
                         break;
 
+
                     case "music_resume":
                         musicManager.resume(
                             guildId
@@ -153,6 +233,7 @@ client.on(
 
                         break;
 
+
                     case "music_skip":
                         await musicManager.skip(
                             guildId
@@ -165,6 +246,7 @@ client.on(
                         });
 
                         break;
+
 
                     case "music_loop": {
                         const enabled =
@@ -182,6 +264,7 @@ client.on(
 
                         break;
                     }
+
 
                     case "music_stop":
                         musicManager.stop(
@@ -218,6 +301,7 @@ client.on(
             return;
         }
 
+
         /*
          * SLASH COMMANDS
          */
@@ -227,6 +311,27 @@ client.on(
         ) {
             return;
         }
+
+
+        /*
+         * RECORD COMMAND STATISTICS
+         */
+
+        try {
+            statsManager.recordCommand(
+                interaction
+            );
+        } catch (error) {
+            console.error(
+                "[Stats] Command tracking error:",
+                error
+            );
+        }
+
+
+        /*
+         * FIND COMMAND
+         */
 
         const command =
             client.commands.get(
@@ -240,6 +345,11 @@ client.on(
 
             return;
         }
+
+
+        /*
+         * EXECUTE COMMAND
+         */
 
         try {
             await command.execute(
@@ -273,6 +383,11 @@ client.on(
     }
 );
 
+
+/*
+ * DISCORD CLIENT ERROR
+ */
+
 client.on(
     "error",
     error => {
@@ -282,6 +397,11 @@ client.on(
         );
     }
 );
+
+
+/*
+ * UNHANDLED ERRORS
+ */
 
 process.on(
     "unhandledRejection",
@@ -303,6 +423,11 @@ process.on(
     }
 );
 
+
+/*
+ * DISCORD TOKEN
+ */
+
 if (!process.env.DISCORD_TOKEN) {
     console.error(
         "❌ DISCORD_TOKEN is missing from .env"
@@ -310,6 +435,11 @@ if (!process.env.DISCORD_TOKEN) {
 
     process.exit(1);
 }
+
+
+/*
+ * LOGIN
+ */
 
 client.login(
     process.env.DISCORD_TOKEN
