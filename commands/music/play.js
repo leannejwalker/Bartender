@@ -1,13 +1,8 @@
-const {
-    SlashCommandBuilder
-} = require("discord.js");
-
+const { SlashCommandBuilder } = require("discord.js");
 const { spawn } = require("child_process");
-
 const musicManager = require("../../music/MusicManager");
 
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
-
 const NODE_PATH =
     "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
 
@@ -31,13 +26,15 @@ function runYtDlp(args) {
         let stdout = "";
         let stderr = "";
 
-        process.stdout.on("data", chunk => {
-            stdout += chunk.toString();
-        });
+        process.stdout.on(
+            "data",
+            chunk => stdout += chunk.toString()
+        );
 
-        process.stderr.on("data", chunk => {
-            stderr += chunk.toString();
-        });
+        process.stderr.on(
+            "data",
+            chunk => stderr += chunk.toString()
+        );
 
         process.on("error", reject);
 
@@ -67,12 +64,9 @@ async function getVideoInfo(query) {
 
     const output = await runYtDlp([
         ...YTDLP_COMMON_ARGS,
-
         "--dump-single-json",
-
         "-f",
         "bestaudio/best",
-
         target
     ]);
 
@@ -82,12 +76,16 @@ async function getVideoInfo(query) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("play")
-        .setDescription("Play a song or add it to the queue")
+        .setDescription(
+            "Play a song, or resume the current music"
+        )
         .addStringOption(option =>
             option
                 .setName("query")
-                .setDescription("YouTube URL or song name")
-                .setRequired(true)
+                .setDescription(
+                    "YouTube URL or song name (optional)"
+                )
+                .setRequired(false)
         ),
 
     async execute(interaction) {
@@ -104,6 +102,85 @@ module.exports = {
 
         const query =
             interaction.options.getString("query");
+
+        /*
+         * --------------------------------------------------
+         * /play with NO query
+         * --------------------------------------------------
+         */
+
+        if (!query) {
+            const data =
+                musicManager.getGuildData(
+                    interaction.guildId
+                );
+
+            /*
+             * If there is a current track and the player
+             * is paused, resume it.
+             */
+            if (data.current) {
+                musicManager.connect(
+                    interaction.guildId,
+                    memberChannel
+                );
+
+                musicManager.setTextChannel(
+                    interaction.guildId,
+                    interaction.channel
+                );
+
+                const resumed =
+                    musicManager.resume(
+                        interaction.guildId
+                    );
+
+                if (resumed) {
+                    return interaction.reply(
+                        "▶️ Resumed the current song."
+                    );
+                }
+            }
+
+            /*
+             * If there is something in the queue but
+             * nothing is currently playing, start it.
+             */
+            if (
+                !data.current &&
+                data.queue.length > 0
+            ) {
+                musicManager.connect(
+                    interaction.guildId,
+                    memberChannel
+                );
+
+                musicManager.setTextChannel(
+                    interaction.guildId,
+                    interaction.channel
+                );
+
+                await musicManager.playNext(
+                    interaction.guildId
+                );
+
+                return interaction.reply(
+                    "▶️ Started the music queue."
+                );
+            }
+
+            return interaction.reply({
+                content:
+                    "🎵 Nothing is paused or queued. Use `/play query:<song>` to start some music.",
+                ephemeral: true
+            });
+        }
+
+        /*
+         * --------------------------------------------------
+         * /play WITH a query
+         * --------------------------------------------------
+         */
 
         await interaction.deferReply();
 
@@ -169,6 +246,7 @@ module.exports = {
                     `▶️ Now playing **${track.title}**`
                 );
             }
+
         } catch (error) {
             console.error(
                 "[Music] Play command error:",
@@ -179,9 +257,9 @@ module.exports = {
                 String(error?.message || error);
 
             if (
-                message.toLowerCase().includes(
-                    "verification"
-                )
+                message
+                    .toLowerCase()
+                    .includes("verification")
             ) {
                 await interaction.editReply(
                     "❌ YouTube's verification challenge could not be solved."
@@ -191,7 +269,10 @@ module.exports = {
             }
 
             await interaction.editReply(
-                `❌ Could not play that: ${message.slice(0, 1500)}`
+                `❌ Could not play that: ${message.slice(
+                    0,
+                    1500
+                )}`
             );
         }
     }
