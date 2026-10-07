@@ -3,65 +3,55 @@ const {
     EmbedBuilder
 } = require("discord.js");
 
-const musicManager =
-    require("../../music/MusicManager");
+const musicManager = require("../../music/MusicManager");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("queue")
-        .setDescription(
-            "Show the music queue"
-        ),
+        .setDescription("Show the music queue"),
 
     async execute(interaction) {
-        const data =
-            musicManager.get(
-                interaction.guild.id
-            );
+        const data = musicManager.getGuildDataPublic(interaction.guildId);
 
-        if (
-            !data.current &&
-            data.queue.length === 0
-        ) {
-            return interaction.reply(
-                "📭 The queue is empty."
-            );
+        if (!data) {
+            return interaction.reply({
+                content: "🎵 The music queue is empty.",
+                ephemeral: true
+            });
         }
 
-        let description = "";
+        const current = data.current;
+        const queue = data.queue || [];
 
-        if (data.current) {
-            description +=
-                `🎵 **Now Playing**\n` +
-                `${data.current.title}\n\n`;
+        if (!current && queue.length === 0) {
+            return interaction.reply({
+                content: "🎵 The music queue is empty.",
+                ephemeral: true
+            });
         }
 
-        if (data.queue.length > 0) {
-            description +=
-                "**Up Next**\n";
+        const lines = [];
 
-            description += data.queue
-                .slice(0, 10)
-                .map(
-                    (track, index) =>
-                        `\`${index + 1}.\` ${track.title}`
-                )
-                .join("\n");
+        if (current) {
+            lines.push(`🎵 **Now Playing:** ${current.title}`);
+            lines.push("");
         }
 
-        const embed =
-            new EmbedBuilder()
-                .setColor(0x7c3aed)
-                .setTitle(
-                    "🎶 Music Queue"
-                )
-                .setDescription(
-                    description
-                )
-                .setFooter({
-                    text:
-                        `${data.queue.length} song(s) waiting`
-                });
+        if (queue.length > 0) {
+            queue.forEach((track, index) => {
+                lines.push(`**${index + 1}.** ${track.title}`);
+            });
+        } else {
+            lines.push("No songs waiting in the queue.");
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865f2)
+            .setTitle("🎶 Music Queue")
+            .setDescription(lines.join("\n"))
+            .setFooter({
+                text: `${queue.length} song${queue.length === 1 ? "" : "s"} queued`
+            });
 
         await interaction.reply({
             embeds: [embed]
