@@ -24,7 +24,11 @@ function buildProgressBar(position, duration, length = 20) {
         return "━━━━━━━━━━━━━━━━━━━━";
     }
 
-    const progress = Math.min(Math.max(position / duration, 0), 1);
+    const progress = Math.min(
+        Math.max(position / duration, 0),
+        1
+    );
+
     const filled = Math.round(progress * length);
     const empty = length - filled;
 
@@ -35,12 +39,33 @@ function buildProgressBar(position, duration, length = 20) {
     );
 }
 
+function isValidUrl(value) {
+    if (!value || typeof value !== "string") {
+        return false;
+    }
+
+    try {
+        const url = new URL(value);
+
+        return (
+            url.protocol === "http:" ||
+            url.protocol === "https:"
+        );
+    } catch {
+        return false;
+    }
+}
+
 function buildNowPlayingEmbed(data) {
     if (!data?.current) {
         return new EmbedBuilder()
             .setColor(0x5865F2)
-            .setAuthor({ name: "🎵 NOW PLAYING" })
-            .setDescription("Nothing is currently playing.");
+            .setAuthor({
+                name: "🎵 NOW PLAYING"
+            })
+            .setDescription(
+                "Nothing is currently playing."
+            );
     }
 
     const track = data.current;
@@ -60,7 +85,9 @@ function buildNowPlayingEmbed(data) {
             ? Math.min(position / duration, 1)
             : 0;
 
-    const percentage = Math.round(progress * 100);
+    const percentage = Math.round(
+        progress * 100
+    );
 
     const elapsed = formatTime(position);
     const total = formatTime(duration);
@@ -70,22 +97,22 @@ function buildNowPlayingEmbed(data) {
         duration
     );
 
-    const queueLength = data.queue?.length || 0;
+    const queueLength =
+        data.queue?.length || 0;
 
-    let queueText;
-
-    if (queueLength > 0) {
-        queueText = `#1 • ${queueLength} more in queue`;
-    } else {
-        queueText = "#1 • Queue empty";
-    }
+    const queueText =
+        queueLength > 0
+            ? `#1 • ${queueLength} more in queue`
+            : "#1 • Queue empty";
 
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setAuthor({
             name: "🎵 NOW PLAYING"
         })
-        .setTitle(track.title || "Unknown Track")
+        .setTitle(
+            track.title || "Unknown Track"
+        )
         .setDescription([
             `**${progressBar}**`,
             `\`${elapsed}\` ━━━━━━━━━ \`${total}\``,
@@ -98,11 +125,13 @@ function buildNowPlayingEmbed(data) {
         ].join("\n"))
         .setTimestamp();
 
-    if (track.url) {
+    // Only set the embed URL when it is actually valid.
+    if (isValidUrl(track.url)) {
         embed.setURL(track.url);
     }
 
-    if (track.thumbnail) {
+    // Only use a valid thumbnail URL.
+    if (isValidUrl(track.thumbnail)) {
         embed.setImage(track.thumbnail);
     }
 
@@ -112,49 +141,65 @@ function buildNowPlayingEmbed(data) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("nowplaying")
-        .setDescription("Show what's currently playing"),
+        .setDescription(
+            "Show what's currently playing"
+        ),
 
-    /*
-     * MusicManager uses this function to refresh the
-     * existing /nowplaying message.
-     */
     buildNowPlayingEmbed,
 
     async execute(interaction) {
-        const data = musicManager.getGuildDataPublic(
-            interaction.guildId
-        );
-
-        if (!data || !data.current) {
-            return interaction.reply({
-                content: "🎵 Nothing is currently playing.",
-                ephemeral: true
-            });
-        }
-
-        const embed = buildNowPlayingEmbed(data);
-
-        await interaction.reply({
-            embeds: [embed]
-        });
-
-        /*
-         * Save the actual Discord message so MusicManager
-         * can edit it as playback progresses.
-         */
         try {
-            const message = await interaction.fetchReply();
+            const data =
+                musicManager.getGuildDataPublic(
+                    interaction.guildId
+                );
 
-            const guildData = musicManager.getGuildData(
-                interaction.guildId
-            );
+            if (!data || !data.current) {
+                return interaction.reply({
+                    content:
+                        "🎵 Nothing is currently playing.",
+                    ephemeral: true
+                });
+            }
 
-            guildData.nowPlayingMessage = message;
+            const embed =
+                buildNowPlayingEmbed(data);
+
+            await interaction.reply({
+                embeds: [embed]
+            });
+
+            try {
+                const message =
+                    await interaction.fetchReply();
+
+                const guildData =
+                    musicManager.getGuildData(
+                        interaction.guildId
+                    );
+
+                guildData.nowPlayingMessage =
+                    message;
+            } catch (error) {
+                console.error(
+                    "[Music] Could not store now-playing message:",
+                    error
+                );
+            }
         } catch (error) {
             console.error(
-                "[Music] Could not store now-playing message:",
+                "[Music] Now Playing command error:",
                 error
             );
+
+            if (!interaction.replied &&
+                !interaction.deferred) {
+                await interaction.reply({
+                    content:
+                        "❌ I couldn't build the now-playing message.",
+                    ephemeral: true
+                });
+            }
         }
     }
 };
