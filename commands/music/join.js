@@ -1,36 +1,50 @@
-const {
-    SlashCommandBuilder
-} = require("discord.js");
-
-const musicManager =
-    require("../../music/MusicManager");
+const { SlashCommandBuilder } = require("discord.js");
+const musicManager = require("../../music/MusicManager");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("join")
-        .setDescription(
-            "Join your voice channel"
-        ),
+        .setDescription("Join your current voice channel"),
 
     async execute(interaction) {
         const voiceChannel =
-            interaction.member.voice.channel;
+            interaction.member?.voice?.channel;
 
         if (!voiceChannel) {
             return interaction.reply({
                 content:
-                    "❌ Join a voice channel first.",
+                    "❌ You need to be in a voice channel first.",
                 ephemeral: true
             });
         }
 
-        await musicManager.connect(
-            interaction.guild,
-            voiceChannel
-        );
+        try {
+            musicManager.connect(
+                interaction.guildId,
+                voiceChannel
+            );
 
-        await interaction.reply(
-            `🎧 Joined **${voiceChannel.name}**.`
-        );
+            musicManager.setTextChannel(
+                interaction.guildId,
+                interaction.channel
+            );
+
+            await interaction.reply(
+                `🔊 Joined **${voiceChannel.name}**.`
+            );
+        } catch (error) {
+            console.error(
+                "[Music] Join command error:",
+                error
+            );
+
+            await interaction.reply({
+                content:
+                    `❌ Could not join the voice channel: ${
+                        error?.message || error
+                    }`,
+                ephemeral: true
+            });
+        }
     }
 };
