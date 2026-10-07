@@ -18,6 +18,8 @@ const NODE_PATH =
 const YTDLP_COMMON_ARGS = [
     "--js-runtimes",
     `node:${NODE_PATH}`,
+    "--extractor-args",
+    "youtube:player-client=mweb",
     "--no-playlist",
     "--no-warnings"
 ];
