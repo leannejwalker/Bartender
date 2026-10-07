@@ -12,6 +12,17 @@ const { spawn } = require("child_process");
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
 const FFMPEG_PATH = "/usr/bin/ffmpeg";
 
+const YTDLP_COMMON_ARGS = [
+    "--js-runtimes",
+    "node",
+
+    "--remote-components",
+    "ejs:github",
+
+    "--no-playlist",
+    "--no-warnings"
+];
+
 class MusicManager {
     constructor() {
         this.guilds = new Map();
@@ -193,10 +204,26 @@ class MusicManager {
             `[Music] Resolving audio with yt-dlp: ${track.url}`
         );
 
-        const streamUrl = await this.getAudioUrl(track.url, guildId);
+        let streamUrl;
+
+        try {
+            streamUrl = await this.getAudioUrl(
+                track.url,
+                guildId
+            );
+        } catch (error) {
+            console.error(
+                `[Music] yt-dlp could not resolve "${track.title}":`,
+                error.message
+            );
+
+            throw error;
+        }
 
         if (!streamUrl) {
-            throw new Error("yt-dlp did not return an audio URL.");
+            throw new Error(
+                "yt-dlp did not return an audio URL."
+            );
         }
 
         console.log(
@@ -268,7 +295,7 @@ class MusicManager {
             );
         });
 
-        ffmpeg.on("close", (code, signal) => {
+        ffmpeg.on("close", code => {
             if (data.ffmpegProcess === ffmpeg) {
                 data.ffmpegProcess = null;
             }
@@ -310,11 +337,7 @@ class MusicManager {
     getAudioUrl(url, guildId) {
         return new Promise((resolve, reject) => {
             const args = [
-                "--js-runtimes",
-                "node",
-
-                "--no-playlist",
-                "--no-warnings",
+                ...YTDLP_COMMON_ARGS,
 
                 "-f",
                 "bestaudio/best",
@@ -323,6 +346,10 @@ class MusicManager {
 
                 url
             ];
+
+            console.log(
+                `[Music] Running yt-dlp for ${url}`
+            );
 
             const process = spawn(
                 YTDLP_PATH,
@@ -336,7 +363,8 @@ class MusicManager {
                 }
             );
 
-            const data = this.guilds.get(guildId);
+            const data =
+                this.guilds.get(guildId);
 
             if (data) {
                 data.ytDlpProcess = process;
@@ -354,7 +382,10 @@ class MusicManager {
             });
 
             process.on("error", error => {
-                if (data && data.ytDlpProcess === process) {
+                if (
+                    data &&
+                    data.ytDlpProcess === process
+                ) {
                     data.ytDlpProcess = null;
                 }
 
@@ -362,19 +393,21 @@ class MusicManager {
             });
 
             process.on("close", code => {
-                if (data && data.ytDlpProcess === process) {
+                if (
+                    data &&
+                    data.ytDlpProcess === process
+                ) {
                     data.ytDlpProcess = null;
                 }
 
                 if (code !== 0) {
                     console.error(
-                        `[Music] yt-dlp failed with code ${code}`
+                        `[Music] yt-dlp exited with code ${code}`
                     );
 
                     if (stderr) {
                         console.error(
-                            `[Music] yt-dlp error:`,
-                            stderr
+                            `[Music] yt-dlp stderr: ${stderr}`
                         );
                     }
 
