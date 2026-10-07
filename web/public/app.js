@@ -38,29 +38,28 @@ document.getElementById(id);
 
 function formatNumber(value) {
 
-```
+
 return Number(value || 0)
     .toLocaleString();
-```
+
 
 }
 
 function escapeHtml(value) {
 
-```
 return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-```
+
 
 }
 
 function formatDate(value) {
 
-```
+
 if (!value) {
     return "Unknown";
 }
@@ -83,13 +82,10 @@ return date.toLocaleString(
         timeStyle: "short"
     }
 );
-```
-
 }
 
 function formatUptime(seconds) {
 
-```
 const totalSeconds =
     Math.max(
         0,
@@ -128,7 +124,6 @@ if (hours > 0) {
 
 
 return `${minutes}m`;
-```
 
 }
 
@@ -140,7 +135,7 @@ return `${minutes}m`;
 
 async function fetchJson(url) {
 
-```
+
 const response =
     await fetch(
         url,
@@ -159,7 +154,6 @@ if (!response.ok) {
 
 
 return response.json();
-```
 
 }
 
@@ -171,7 +165,6 @@ return response.json();
 
 async function loadOverview() {
 
-```
 const data =
     await fetchJson(
         "/api/stats/overview"
@@ -230,7 +223,6 @@ if ($("modActions")) {
             data.total_mod_actions
         );
 }
-```
 
 }
 
@@ -242,7 +234,6 @@ if ($("modActions")) {
 
 async function loadStatus() {
 
-```
 const data =
     await fetchJson(
         "/api/status"
@@ -302,7 +293,6 @@ if ($("voiceChannel")) {
             "Not connected";
     }
 }
-```
 
 }
 
@@ -314,7 +304,7 @@ if ($("voiceChannel")) {
 
 async function loadCommands() {
 
-```
+
 const commands =
     await fetchJson(
         "/api/stats/commands"
@@ -370,7 +360,6 @@ container.innerHTML =
             `
         )
         .join("");
-```
 
 }
 
@@ -382,7 +371,6 @@ container.innerHTML =
 
 async function loadChannels() {
 
-```
 const channels =
     await fetchJson(
         "/api/stats/channels"
@@ -438,7 +426,6 @@ container.innerHTML =
             `
         )
         .join("");
-```
 
 }
 
@@ -450,7 +437,6 @@ container.innerHTML =
 
 async function loadUsers() {
 
-```
 const users =
     await fetchJson(
         "/api/stats/users"
@@ -506,7 +492,6 @@ container.innerHTML =
             `
         )
         .join("");
-```
 
 }
 
@@ -518,7 +503,6 @@ container.innerHTML =
 
 async function loadMemberEvents() {
 
-```
 const events =
     await fetchJson(
         "/api/stats/members"
@@ -601,7 +585,6 @@ container.innerHTML =
             }
         )
         .join("");
-```
 
 }
 
@@ -613,7 +596,6 @@ container.innerHTML =
 
 async function loadChart() {
 
-```
 const data =
     await fetchJson(
         "/api/stats/daily?days=30"
@@ -621,13 +603,12 @@ const data =
 
 
 drawChart(data);
-```
 
 }
 
 function drawChart(data) {
 
-```
+
 const canvas =
     $("activityChart");
 
@@ -1119,7 +1100,6 @@ drawLegend(
     "#a78bfa",
     "Commands"
 );
-```
 
 }
 
@@ -1137,7 +1117,6 @@ color,
 label
 ) {
 
-```
 ctx.fillStyle =
     color;
 
@@ -1167,7 +1146,6 @@ ctx.fillText(
     x + 13,
     y + 4
 );
-```
 
 }
 
@@ -1181,7 +1159,6 @@ function showDashboardError(
 error
 ) {
 
-```
 console.error(
     "[Bartender Dashboard]",
     error
@@ -1205,7 +1182,6 @@ status.innerHTML = `
     <span class="status-dot"></span>
     Connection error
 `;
-```
 
 }
 
@@ -1217,7 +1193,6 @@ status.innerHTML = `
 
 async function loadDashboard() {
 
-```
 try {
 
     await Promise.all([
@@ -1236,7 +1211,6 @@ try {
         error
     );
 }
-```
 
 }
 
@@ -1277,7 +1251,6 @@ window.addEventListener(
 "resize",
 () => {
 
-```
     loadChart()
         .catch(
             error =>
@@ -1287,6 +1260,4 @@ window.addEventListener(
                 )
         );
 }
-```
-
 );
