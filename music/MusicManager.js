@@ -11,13 +11,13 @@ const { spawn } = require("child_process");
 
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
 const FFMPEG_PATH = "/usr/bin/ffmpeg";
+
 const NODE_PATH =
     "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
 
 const YTDLP_COMMON_ARGS = [
     "--js-runtimes",
     `node:${NODE_PATH}`,
-
     "--no-playlist",
     "--no-warnings"
 ];
@@ -41,8 +41,9 @@ class MusicManager {
                 connection: null,
 
                 current: null,
+                resource: null,
 
-                volume: 0.8,
+                volume: 1.0,
                 loop: false,
 
                 textChannel: null,
@@ -55,70 +56,50 @@ class MusicManager {
                 ffmpegProcess: null
             };
 
-            player.on(AudioPlayerStatus.Idle, async () => {
-                const currentData = this.guilds.get(guildId);
-
-                if (!currentData) {
-                    return;
-                }
-
+            player.on(AudioPlayerStatus.Idle, () => {
                 this.cleanupProcesses(guildId);
 
-                if (currentData.loop && currentData.current) {
-                    try {
-                        await this.playCurrent(guildId);
-                    } catch (error) {
-                        console.error(
-                            `[Music] Loop playback error in ${guildId}:`,
-                            error
-                        );
-                    }
+                const guildData = this.guilds.get(guildId);
 
+                if (!guildData) return;
+
+                guildData.resource = null;
+                guildData.startedAt = null;
+
+                if (guildData.loop && guildData.current) {
+                    this.playCurrent(guildId).catch(console.error);
                     return;
                 }
 
-                currentData.current = null;
-                currentData.startedAt = null;
+                guildData.current = null;
 
                 this.stopProgress(guildId);
 
-                if (currentData.queue.length > 0) {
-                    try {
-                        await this.playNext(guildId);
-                    } catch (error) {
-                        console.error(
-                            `[Music] Next track error in ${guildId}:`,
-                            error
-                        );
-                    }
+                if (guildData.queue.length > 0) {
+                    this.playNext(guildId).catch(console.error);
                 }
             });
 
-            player.on("error", error => {
+            player.on("error", (error) => {
                 console.error(
                     `[Music] Audio player error in ${guildId}:`,
                     error
                 );
 
                 this.cleanupProcesses(guildId);
+
+                const guildData = this.guilds.get(guildId);
+
+                if (!guildData) return;
+
+                guildData.resource = null;
+                guildData.current = null;
+                guildData.startedAt = null;
+
                 this.stopProgress(guildId);
 
-                const currentData = this.guilds.get(guildId);
-
-                if (!currentData) {
-                    return;
-                }
-
-                currentData.current = null;
-                currentData.startedAt = null;
-
-                if (currentData.queue.length > 0) {
-                    this.playNext(guildId).catch(nextError => {
-                        console.error(
-                            `[Music] Failed to continue queue in ${guildId}:`,
-                            nextError
-                        );
-                    });
+                if (guildData.queue.length > 0) {
+                    this.playNext(guildId).catch(console.error);
                 }
             });
 
@@ -128,14 +109,48 @@ class MusicManager {
         return this.guilds.get(guildId);
     }
 
-    async connect(guild, voiceChannel) {
-        const data = this.getGuildData(guild.id);
+    getGuildDataPublic(guildId) {
+        const data = this.getGuildData(guildId);
+
+        let position = 0;
+
+        if (data.current && data.startedAt) {
+            position = Math.max(
+                0,
+                Math.floor((Date.now() - data.startedAt) / 1000)
+            );
+        }
+
+        if (data.current && data.current.durationInSec) {
+            position = Math.min(
+                position,
+                data.current.durationInSec
+            );
+        }
+
+        return {
+            queue: [...data.queue],
+            current: data.current,
+            volume: data.volume,
+            loop: data.loop,
+            position,
+            nowPlayingMessage: data.nowPlayingMessage
+                ? {
+                      id: data.nowPlayingMessage.id,
+                      channelId: data.nowPlayingMessage.channelId
+                  }
+                : null
+        };
+    }
+
+    connect(guildId, voiceChannel) {
+        const data = this.getGuildData(guildId);
 
         if (
             data.connection &&
             data.connection.joinConfig.channelId === voiceChannel.id
         ) {
-            return data;
+            return data.connection;
         }
 
         if (data.connection) {
@@ -146,52 +161,61 @@ class MusicManager {
 
         data.connection = joinVoiceChannel({
             channelId: voiceChannel.id,
-            guildId: guild.id,
-            adapterCreator: guild.voiceAdapterCreator,
+            guildId: guildId,
+            adapterCreator: voiceChannel.guild.voiceAdapterCreator,
             selfDeaf: true
         });
 
         data.connection.subscribe(data.player);
 
-        return data;
+        return data.connection;
     }
 
-    async add(guild, track) {
-        const data = this.getGuildData(guild.id);
+    setTextChannel(guildId, channel) {
+        const data = this.getGuildData(guildId);
+        data.textChannel = channel;
+    }
+
+    async add(guildId, track) {
+        const data = this.getGuildData(guildId);
 
         data.queue.push(track);
 
+        /*
+         * If nothing is currently playing, immediately start
+         * the new track.
+         */
         if (!data.current) {
-            await this.playNext(guild.id);
+            await this.playNext(guildId);
         }
 
         return data;
     }
 
     async playNext(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return;
-        }
+        const data = this.getGuildData(guildId);
 
         if (data.queue.length === 0) {
             data.current = null;
+            data.resource = null;
             data.startedAt = null;
+
             this.stopProgress(guildId);
+
             return;
         }
 
+        data.resource = null;
+
         data.current = data.queue.shift();
-        data.startedAt = Date.now();
 
         await this.playCurrent(guildId);
     }
 
     async playCurrent(guildId) {
-        const data = this.guilds.get(guildId);
+        const data = this.getGuildData(guildId);
 
-        if (!data || !data.current) {
+        if (!data.current) {
             return;
         }
 
@@ -203,112 +227,82 @@ class MusicManager {
             `[Music] Resolving audio with yt-dlp: ${track.url}`
         );
 
-        let streamUrl;
-
-        try {
-            streamUrl = await this.getAudioUrl(
-                track.url,
-                guildId
-            );
-        } catch (error) {
-            console.error(
-                `[Music] yt-dlp could not resolve "${track.title}":`,
-                error.message
-            );
-
-            throw error;
-        }
-
-        if (!streamUrl) {
-            throw new Error(
-                "yt-dlp did not return an audio URL."
-            );
-        }
+        const streamUrl = await this.getAudioUrl(
+            track.url,
+            guildId
+        );
 
         console.log(
             `[Music] Starting FFmpeg for: ${track.title}`
         );
 
+        const ffmpegArgs = [
+            "-hide_banner",
+            "-loglevel",
+            "error",
+
+            "-reconnect",
+            "1",
+            "-reconnect_streamed",
+            "1",
+            "-reconnect_delay_max",
+            "5",
+
+            "-i",
+            streamUrl,
+
+            "-vn",
+
+            "-ac",
+            "2",
+
+            "-ar",
+            "48000",
+
+            "-c:a",
+            "libopus",
+
+            "-b:a",
+            "128k",
+
+            "-f",
+            "ogg",
+
+            "pipe:1"
+        ];
+
         const ffmpeg = spawn(
             FFMPEG_PATH,
-            [
-                "-hide_banner",
-                "-loglevel",
-                "error",
-
-                "-reconnect",
-                "1",
-                "-reconnect_streamed",
-                "1",
-                "-reconnect_delay_max",
-                "5",
-
-                "-i",
-                streamUrl,
-
-                "-vn",
-
-                "-ac",
-                "2",
-
-                "-ar",
-                "48000",
-
-                "-c:a",
-                "libopus",
-
-                "-b:a",
-                "128k",
-
-                "-f",
-                "ogg",
-
-                "pipe:1"
-            ],
+            ffmpegArgs,
             {
-                stdio: [
-                    "ignore",
-                    "pipe",
-                    "pipe"
-                ]
+                stdio: ["ignore", "pipe", "pipe"]
             }
         );
 
         data.ffmpegProcess = ffmpeg;
 
-        let ffmpegError = "";
+        ffmpeg.stderr.on("data", (chunk) => {
+            const message = chunk.toString().trim();
 
-        ffmpeg.stderr.on("data", chunk => {
-            ffmpegError += chunk.toString();
-
-            if (ffmpegError.length > 4000) {
-                ffmpegError =
-                    ffmpegError.slice(-4000);
+            if (message) {
+                console.error(
+                    `[Music] FFmpeg: ${message}`
+                );
             }
         });
 
-        ffmpeg.on("error", error => {
+        ffmpeg.on("error", (error) => {
             console.error(
-                `[Music] FFmpeg process error in ${guildId}:`,
+                `[Music] FFmpeg process error:`,
                 error
             );
         });
 
-        ffmpeg.on("close", code => {
-            if (data.ffmpegProcess === ffmpeg) {
-                data.ffmpegProcess = null;
-            }
-
-            if (code !== 0 && code !== null) {
+        ffmpeg.on("close", (code) => {
+            if (code !== 0) {
                 console.error(
-                    `[Music] FFmpeg exited with code ${code} in ${guildId}`
+                    `[Music] FFmpeg exited with code ${code}`
                 );
-
-                if (ffmpegError) {
-                    console.error(
-                        `[Music] FFmpeg error: ${ffmpegError}`
-                    );
-                }
             }
         });
 
@@ -320,21 +314,23 @@ class MusicManager {
             }
         );
 
-        resource.volume.setVolume(data.volume);
+        data.resource = resource;
 
-        data.player.play(resource);
+        resource.volume.setVolume(data.volume);
 
         data.startedAt = Date.now();
 
-        this.startProgress(guildId);
+        data.player.play(resource);
 
-        console.log(
-            `[Music] Now playing: ${track.title}`
-        );
+        this.startProgress(guildId);
     }
 
     getAudioUrl(url, guildId) {
         return new Promise((resolve, reject) => {
+            console.log(
+                `[Music] Running yt-dlp for ${url}`
+            );
+
             const args = [
                 ...YTDLP_COMMON_ARGS,
 
@@ -346,69 +342,41 @@ class MusicManager {
                 url
             ];
 
-            console.log(
-                `[Music] Running yt-dlp for ${url}`
-            );
-
             const process = spawn(
                 YTDLP_PATH,
                 args,
                 {
-                    stdio: [
-                        "ignore",
-                        "pipe",
-                        "pipe"
-                    ]
+                    stdio: ["ignore", "pipe", "pipe"]
                 }
             );
 
-            const data =
-                this.guilds.get(guildId);
+            const data = this.getGuildData(guildId);
 
-            if (data) {
-                data.ytDlpProcess = process;
-            }
+            data.ytDlpProcess = process;
 
             let stdout = "";
             let stderr = "";
 
-            process.stdout.on("data", chunk => {
+            process.stdout.on("data", (chunk) => {
                 stdout += chunk.toString();
             });
 
-            process.stderr.on("data", chunk => {
+            process.stderr.on("data", (chunk) => {
                 stderr += chunk.toString();
             });
 
-            process.on("error", error => {
-                if (
-                    data &&
-                    data.ytDlpProcess === process
-                ) {
-                    data.ytDlpProcess = null;
-                }
-
+            process.on("error", (error) => {
                 reject(error);
             });
 
-            process.on("close", code => {
-                if (
-                    data &&
-                    data.ytDlpProcess === process
-                ) {
-                    data.ytDlpProcess = null;
-                }
+            process.on("close", (code) => {
+                data.ytDlpProcess = null;
 
                 if (code !== 0) {
                     console.error(
-                        `[Music] yt-dlp exited with code ${code}`
+                        `[Music] yt-dlp failed:`,
+                        stderr
                     );
-
-                    if (stderr) {
-                        console.error(
-                            `[Music] yt-dlp stderr: ${stderr}`
-                        );
-                    }
 
                     reject(
                         new Error(
@@ -420,17 +388,18 @@ class MusicManager {
                     return;
                 }
 
+                const urls = stdout
+                    .split(/\r?\n/)
+                    .map((line) => line.trim())
+                    .filter(Boolean);
+
                 const streamUrl =
-                    stdout
-                        .trim()
-                        .split(/\r?\n/)
-                        .filter(Boolean)
-                        .pop();
+                    urls[urls.length - 1];
 
                 if (!streamUrl) {
                     reject(
                         new Error(
-                            "yt-dlp returned no audio URL."
+                            "yt-dlp did not return an audio URL"
                         )
                     );
 
@@ -443,33 +412,35 @@ class MusicManager {
     }
 
     pause(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return false;
-        }
+        const data = this.getGuildData(guildId);
 
         return data.player.pause();
     }
 
     resume(guildId) {
-        const data = this.guilds.get(guildId);
+        const data = this.getGuildData(guildId);
 
-        if (!data) {
-            return false;
+        /*
+         * If paused, resume normally.
+         */
+        if (data.player.state.status === AudioPlayerStatus.Paused) {
+            return data.player.unpause();
         }
 
-        return data.player.unpause();
+        /*
+         * If there is no current track but something is queued,
+         * start the queue.
+         */
+        if (!data.current && data.queue.length > 0) {
+            this.playNext(guildId).catch(console.error);
+            return true;
+        }
+
+        return false;
     }
 
-    async skip(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return false;
-        }
-
-        this.cleanupProcesses(guildId);
+    skip(guildId) {
+        const data = this.getGuildData(guildId);
 
         data.player.stop();
 
@@ -477,54 +448,47 @@ class MusicManager {
     }
 
     stop(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return false;
-        }
+        const data = this.getGuildData(guildId);
 
         data.queue = [];
         data.current = null;
+        data.resource = null;
         data.startedAt = null;
 
-        this.cleanupProcesses(guildId);
         this.stopProgress(guildId);
 
-        data.player.stop();
+        this.cleanupProcesses(guildId);
+
+        data.player.stop(true);
 
         return true;
     }
 
     setVolume(guildId, volume) {
-        const data = this.guilds.get(guildId);
+        const data = this.getGuildData(guildId);
 
-        if (!data) {
-            return false;
-        }
+        const newVolume = Math.max(
+            0,
+            Math.min(2, Number(volume))
+        );
 
-        data.volume = volume / 100;
+        data.volume = newVolume;
 
-        const resource =
-            data.player.state.resource;
-
-        if (
-            resource &&
-            resource.volume
-        ) {
-            resource.volume.setVolume(
-                data.volume
+        /*
+         * This is the important part:
+         * change the currently playing AudioResource.
+         */
+        if (data.resource?.volume) {
+            data.resource.volume.setVolume(
+                newVolume
             );
         }
 
-        return true;
+        return newVolume;
     }
 
     toggleLoop(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return false;
-        }
+        const data = this.getGuildData(guildId);
 
         data.loop = !data.loop;
 
@@ -532,21 +496,16 @@ class MusicManager {
     }
 
     shuffle(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return false;
-        }
+        const data = this.getGuildData(guildId);
 
         for (
             let i = data.queue.length - 1;
             i > 0;
             i--
         ) {
-            const j =
-                Math.floor(
-                    Math.random() * (i + 1)
-                );
+            const j = Math.floor(
+                Math.random() * (i + 1)
+            );
 
             [
                 data.queue[i],
@@ -557,15 +516,11 @@ class MusicManager {
             ];
         }
 
-        return true;
+        return data.queue;
     }
 
     clear(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return false;
-        }
+        const data = this.getGuildData(guildId);
 
         data.queue = [];
 
@@ -573,11 +528,7 @@ class MusicManager {
     }
 
     remove(guildId, index) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return null;
-        }
+        const data = this.getGuildData(guildId);
 
         if (
             index < 0 ||
@@ -590,95 +541,82 @@ class MusicManager {
     }
 
     getPosition(guildId) {
-        const data = this.guilds.get(guildId);
+        const data = this.getGuildData(guildId);
 
-        if (!data) {
+        if (!data.current || !data.startedAt) {
             return 0;
         }
 
-        const resource =
-            data.player.state.resource;
-
-        if (!resource) {
-            return 0;
-        }
-
-        return resource.playbackDuration || 0;
-    }
-
-    getGuildDataPublic(guildId) {
-        return this.guilds.get(guildId);
+        return Math.floor(
+            (Date.now() - data.startedAt) / 1000
+        );
     }
 
     startProgress(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return;
-        }
+        const data = this.getGuildData(guildId);
 
         this.stopProgress(guildId);
 
-        data.progressInterval =
-            setInterval(async () => {
+        if (!data.textChannel) {
+            return;
+        }
+
+        /*
+         * Update the now-playing message every 10 seconds.
+         * This assumes your nowplaying.js exports these helpers.
+         */
+        data.progressInterval = setInterval(
+            async () => {
                 try {
                     if (
-                        !data.nowPlayingMessage ||
-                        !data.current
+                        !data.current ||
+                        !data.nowPlayingMessage
                     ) {
                         return;
                     }
 
-                    const {
-                        buildNowPlayingEmbed,
-                        buildNowPlayingButtons
-                    } = require(
-                        "../commands/music/nowplaying"
-                    );
-
-                    const embed =
-                        buildNowPlayingEmbed(
-                            guildId
+                    const nowPlaying =
+                        require(
+                            "../commands/music/nowplaying"
                         );
 
-                    const buttons =
-                        buildNowPlayingButtons();
+                    if (
+                        typeof nowPlaying.buildNowPlayingEmbed ===
+                        "function"
+                    ) {
+                        const embed =
+                            nowPlaying.buildNowPlayingEmbed(
+                                this.getGuildDataPublic(
+                                    guildId
+                                )
+                            );
 
-                    await data.nowPlayingMessage.edit({
-                        embeds: [embed],
-                        components: [buttons]
-                    });
+                        await data.nowPlayingMessage.edit({
+                            embeds: [embed]
+                        });
+                    }
                 } catch (error) {
                     console.error(
-                        "[Music] Now Playing update error:",
+                        "[Music] Failed to update now playing:",
                         error
                     );
                 }
-            }, 10000);
+            },
+            10000
+        );
     }
 
     stopProgress(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return;
-        }
+        const data = this.getGuildData(guildId);
 
         if (data.progressInterval) {
-            clearInterval(
-                data.progressInterval
-            );
-
+            clearInterval(data.progressInterval);
             data.progressInterval = null;
         }
     }
 
     cleanupProcesses(guildId) {
-        const data = this.guilds.get(guildId);
-
-        if (!data) {
-            return;
-        }
+        const data = this.getGuildData(guildId);
 
         if (data.ytDlpProcess) {
             try {
@@ -698,24 +636,17 @@ class MusicManager {
     }
 
     leave(guildId) {
-        const data = this.guilds.get(guildId);
+        const data = this.getGuildData(guildId);
 
-        if (!data) {
-            return false;
-        }
-
-        this.cleanupProcesses(guildId);
-        this.stopProgress(guildId);
+        this.stop(guildId);
 
         if (data.connection) {
             try {
                 data.connection.destroy();
             } catch {}
-        }
 
-        try {
-            data.player.stop();
-        } catch {}
+            data.connection = null;
+        }
 
         this.guilds.delete(guildId);
 

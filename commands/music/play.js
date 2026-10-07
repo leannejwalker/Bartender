@@ -4,13 +4,19 @@ const {
 
 const { spawn } = require("child_process");
 
-const musicManager =
-    require("../../music/MusicManager");
+const musicManager = require("../../music/MusicManager");
 
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
 
 const NODE_PATH =
     "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
+
+const YTDLP_COMMON_ARGS = [
+    "--js-runtimes",
+    `node:${NODE_PATH}`,
+    "--no-playlist",
+    "--no-warnings"
+];
 
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {
@@ -18,11 +24,7 @@ function runYtDlp(args) {
             YTDLP_PATH,
             args,
             {
-                stdio: [
-                    "ignore",
-                    "pipe",
-                    "pipe"
-                ]
+                stdio: ["ignore", "pipe", "pipe"]
             }
         );
 
@@ -37,9 +39,7 @@ function runYtDlp(args) {
             stderr += chunk.toString();
         });
 
-        process.on("error", error => {
-            reject(error);
-        });
+        process.on("error", reject);
 
         process.on("close", code => {
             if (code !== 0) {
@@ -59,65 +59,51 @@ function runYtDlp(args) {
 }
 
 async function getVideoInfo(query) {
-    let target = query;
+    const target =
+        query.startsWith("http://") ||
+        query.startsWith("https://")
+            ? query
+            : `ytsearch1:${query}`;
 
-    // If this isn't a YouTube URL, search YouTube.
-    if (
-        !query.includes("youtube.com/") &&
-        !query.includes("youtu.be/")
-    ) {
-        target =
-            `ytsearch1:${query}`;
-    }
+    const output = await runYtDlp([
+        ...YTDLP_COMMON_ARGS,
 
-    const output =
-        await runYtDlp([
-            "--js-runtimes",
-            "node",
+        "--dump-single-json",
 
-            "--no-playlist",
-            "--no-warnings",
+        "-f",
+        "bestaudio/best",
 
-            "--dump-single-json",
+        target
+    ]);
 
-            target
-        ]);
-
-    const info =
-        JSON.parse(output);
-
-    return info;
+    return JSON.parse(output);
 }
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("play")
-        .setDescription("Play a YouTube song")
+        .setDescription("Play a song or add it to the queue")
         .addStringOption(option =>
             option
                 .setName("query")
-                .setDescription(
-                    "YouTube URL or song name"
-                )
+                .setDescription("YouTube URL or song name")
                 .setRequired(true)
         ),
 
     async execute(interaction) {
-        const query =
-            interaction.options.getString(
-                "query"
-            );
+        const memberChannel =
+            interaction.member?.voice?.channel;
 
-        const voiceChannel =
-            interaction.member.voice.channel;
-
-        if (!voiceChannel) {
+        if (!memberChannel) {
             return interaction.reply({
                 content:
-                    "❌ You need to join a voice channel first.",
+                    "❌ You need to be in a voice channel first.",
                 ephemeral: true
             });
         }
+
+        const query =
+            interaction.options.getString("query");
 
         await interaction.deferReply();
 
@@ -125,37 +111,18 @@ module.exports = {
             const info =
                 await getVideoInfo(query);
 
-            if (!info) {
-                return interaction.editReply(
-                    "❌ I couldn't find that song on YouTube."
-                );
-            }
-
-            const videoUrl =
-                info.webpage_url ||
-                info.original_url;
-
-            if (!videoUrl) {
-                return interaction.editReply(
-                    "❌ I couldn't determine the YouTube URL."
-                );
-            }
-
-            const duration =
-                Number(
-                    info.duration || 0
-                );
-
             const track = {
                 title:
                     info.title ||
                     "Unknown title",
 
                 url:
-                    videoUrl,
+                    info.webpage_url ||
+                    info.original_url ||
+                    query,
 
                 durationInSec:
-                    duration,
+                    Number(info.duration || 0),
 
                 thumbnail:
                     info.thumbnail ||
@@ -171,70 +138,60 @@ module.exports = {
             };
 
             const data =
-                await musicManager.connect(
-                    interaction.guild,
-                    voiceChannel
+                musicManager.getGuildData(
+                    interaction.guildId
                 );
 
-            data.textChannel =
-                interaction.channel;
+            musicManager.connect(
+                interaction.guildId,
+                memberChannel
+            );
+
+            musicManager.setTextChannel(
+                interaction.guildId,
+                interaction.channel
+            );
+
+            const wasPlaying =
+                Boolean(data.current);
 
             await musicManager.add(
-                interaction.guild,
+                interaction.guildId,
                 track
             );
 
-            const guildData =
-                musicManager.getGuildDataPublic(
-                    interaction.guild.id
+            if (wasPlaying) {
+                await interaction.editReply(
+                    `🎵 Added **${track.title}** to the queue.`
                 );
-
-            const isPlaying =
-                guildData &&
-                guildData.current === track;
-
-            if (isPlaying) {
-                return interaction.editReply(
-                    `🎵 Now playing **${track.title}**`
+            } else {
+                await interaction.editReply(
+                    `▶️ Now playing **${track.title}**`
                 );
             }
-
-            return interaction.editReply(
-                `🎵 Added **${track.title}** to the queue.`
-            );
-
         } catch (error) {
             console.error(
                 "[Music] Play command error:",
                 error
             );
 
-            let message =
-                "❌ I couldn't play that YouTube video.";
-
-            const errorText =
-                String(
-                    error?.message || error
-                );
+            const message =
+                String(error?.message || error);
 
             if (
-                errorText.includes(
-                    "Sign in to confirm"
+                message.toLowerCase().includes(
+                    "verification"
                 )
             ) {
-                message =
-                    "❌ YouTube is asking for verification for that video.";
-            } else if (
-                errorText.includes(
-                    "No video formats found"
-                )
-            ) {
-                message =
-                    "❌ YouTube didn't provide a playable audio format for that video.";
+                await interaction.editReply(
+                    "❌ YouTube's verification challenge could not be solved."
+                );
+
+                return;
             }
 
-            return interaction.editReply(
-                message
+            await interaction.editReply(
+                `❌ Could not play that: ${message.slice(0, 1500)}`
             );
         }
     }

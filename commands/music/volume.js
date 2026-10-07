@@ -2,42 +2,44 @@ const {
     SlashCommandBuilder
 } = require("discord.js");
 
-const musicManager =
-    require("../../music/MusicManager");
+const musicManager = require("../../music/MusicManager");
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("volume")
-        .setDescription(
-            "Set music volume"
-        )
+        .setDescription("Set the music volume")
         .addIntegerOption(option =>
             option
-                .setName("level")
-                .setDescription(
-                    "Volume from 0 to 100"
-                )
-                .setMinValue(0)
-                .setMaxValue(100)
+                .setName("volume")
+                .setDescription("Volume percentage (0-200)")
                 .setRequired(true)
+                .setMinValue(0)
+                .setMaxValue(200)
         ),
 
     async execute(interaction) {
-        const level =
-            interaction.options.getInteger(
-                "level"
-            );
+        const percentage =
+            interaction.options.getInteger("volume");
 
-        const volume =
-            musicManager.setVolume(
-                interaction.guild.id,
-                level / 100
-            );
+        const volume = percentage / 100;
 
-        await interaction.reply(
-            `🔊 Volume set to **${Math.round(
-                volume * 100
-            )}%**.`
+        musicManager.setVolume(
+            interaction.guildId,
+            volume
         );
+
+        let icon = "🔊";
+
+        if (percentage === 0) {
+            icon = "🔇";
+        } else if (percentage < 50) {
+            icon = "🔈";
+        } else if (percentage < 100) {
+            icon = "🔉";
+        }
+
+        await interaction.reply({
+            content: `${icon} Volume set to **${percentage}%**.`
+        });
     }
 };
