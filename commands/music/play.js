@@ -11,15 +11,9 @@ const YOUTUBE_COOKIES =
 const NODE_PATH =
     "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
 
-const YTDLP_COMMON_ARGS = [
-    "--cookies",
-    YOUTUBE_COOKIES,
-    "--js-runtimes",
-    `node:${NODE_PATH}`,
-    "--extractor-args",
-    "youtube:player-client=mweb;po_token=web.gvs+bgutil:http",
-    "--no-warnings"
-];
+const {
+    YTDLP_COMMON_ARGS
+} = require("../../music/MusicManager");
 
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {
