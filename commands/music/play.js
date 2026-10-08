@@ -3,50 +3,51 @@ const { spawn } = require("child_process");
 const musicManager = require("../../music/MusicManager");
 
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
-const FFMPEG_PATH = "/usr/bin/ffmpeg";
 
-const YOUTUBE_COOKIES =
-    "/home/bartenderadmin/Bartender/cookies/youtube.txt";
-
-const NODE_PATH =
-    "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
-
-const {
-    YTDLP_COMMON_ARGS
-} = require("../../music/MusicManager");
+const YTDLP_COMMON_ARGS =
+    musicManager.YTDLP_COMMON_ARGS;
 
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {
-        const process = spawn(
+        const ytDlp = spawn(
             YTDLP_PATH,
             args,
             {
-                stdio: ["ignore", "pipe", "pipe"]
+                stdio: [
+                    "ignore",
+                    "pipe",
+                    "pipe"
+                ]
             }
         );
 
         let stdout = "";
         let stderr = "";
 
-        process.stdout.on("data", chunk => {
-            stdout += chunk.toString();
-        });
+        ytDlp.stdout.on(
+            "data",
+            chunk => {
+                stdout += chunk.toString();
+            }
+        );
 
-        process.stderr.on("data", chunk => {
-            stderr += chunk.toString();
-        });
+        ytDlp.stderr.on(
+            "data",
+            chunk => {
+                stderr += chunk.toString();
+            }
+        );
 
-        process.on("error", reject);
+        ytDlp.on("error", reject);
 
-        process.on("close", code => {
+        ytDlp.on("close", code => {
             if (code !== 0) {
-                reject(
+                return reject(
                     new Error(
                         stderr ||
                         `yt-dlp exited with code ${code}`
                     )
                 );
-                return;
             }
 
             resolve(stdout);
@@ -59,7 +60,7 @@ async function searchYouTube(query) {
         ...YTDLP_COMMON_ARGS,
         "--flat-playlist",
         "--dump-single-json",
-        "ytsearch1:" + query
+        `ytsearch1:${query}`
     ]);
 
     const data = JSON.parse(output);
@@ -81,7 +82,6 @@ async function getVideoInfo(query) {
         query.startsWith("http://") ||
         query.startsWith("https://");
 
-    // Direct YouTube URL
     if (isUrl) {
         const output = await runYtDlp([
             ...YTDLP_COMMON_ARGS,
@@ -94,7 +94,6 @@ async function getVideoInfo(query) {
         return JSON.parse(output);
     }
 
-    // Search YouTube
     const result =
         await searchYouTube(query);
 
@@ -117,7 +116,6 @@ async function getVideoInfo(query) {
         `[Music] Search result: ${videoUrl}`
     );
 
-    // Now fetch the REAL video metadata.
     const output = await runYtDlp([
         ...YTDLP_COMMON_ARGS,
         "--dump-single-json",
@@ -187,7 +185,6 @@ module.exports = {
         const query =
             interaction.options.getString("query");
 
-        // /play with no query
         if (!query) {
             const data =
                 musicManager.getGuildData(
@@ -330,15 +327,11 @@ module.exports = {
                 track
             );
 
-            if (wasPlaying) {
-                await interaction.editReply(
-                    `🎵 Added **${track.title}** to the queue.`
-                );
-            } else {
-                await interaction.editReply(
-                    `▶️ Now playing **${track.title}**`
-                );
-            }
+            await interaction.editReply(
+                wasPlaying
+                    ? `🎵 Added **${track.title}** to the queue.`
+                    : `▶️ Now playing **${track.title}**`
+            );
         } catch (error) {
             console.error(
                 "[Music] Play command error:",
@@ -353,10 +346,9 @@ module.exports = {
                     .toLowerCase()
                     .includes("verification")
             ) {
-                await interaction.editReply(
+                return interaction.editReply(
                     "❌ YouTube's verification challenge could not be solved."
                 );
-                return;
             }
 
             await interaction.editReply(
