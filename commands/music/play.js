@@ -3,21 +3,20 @@ const { spawn } = require("child_process");
 const musicManager = require("../../music/MusicManager");
 
 const YTDLP_PATH = "/usr/local/bin/yt-dlp";
-
-const NODE_PATH =
-    "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
+const FFMPEG_PATH = "/usr/bin/ffmpeg";
 
 const YOUTUBE_COOKIES =
     "/home/bartenderadmin/Bartender/cookies/youtube.txt";
 
+const NODE_PATH =
+    "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
+
 const YTDLP_COMMON_ARGS = [
-    "--js-runtimes",
-    `node:${NODE_PATH}`,
+    "--verbose",
     "--cookies",
     YOUTUBE_COOKIES,
-    "--extractor-args",
-    "youtube:player-client=mweb",
-    "--no-playlist",
+    "--js-runtimes",
+    `node:${NODE_PATH}`,
     "--no-warnings"
 ];
 
