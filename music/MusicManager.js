@@ -412,10 +412,8 @@ class MusicManager {
         }
     }
 }
-
 const musicManager = new MusicManager();
 
-musicManager.YTDLP_COMMON_ARGS =
-    YTDLP_COMMON_ARGS;
+musicManager.YTDLP_COMMON_ARGS = YTDLP_COMMON_ARGS;
 
 module.exports = musicManager;
