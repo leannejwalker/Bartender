@@ -7,9 +7,14 @@ const YTDLP_PATH = "/usr/local/bin/yt-dlp";
 const NODE_PATH =
     "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
 
+const YOUTUBE_COOKIES =
+    "/home/bartenderadmin/Bartender/cookies/youtube.txt";
+
 const YTDLP_COMMON_ARGS = [
     "--js-runtimes",
     `node:${NODE_PATH}`,
+    "--cookies",
+    YOUTUBE_COOKIES,
     "--extractor-args",
     "youtube:player-client=mweb",
     "--no-playlist",
