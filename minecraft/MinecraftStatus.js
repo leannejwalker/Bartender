@@ -113,7 +113,10 @@ function buildStatusEmbed(status, config) {
             },
             {
                 name: "Port",
-                value: `\`${status.port}\``,
+                value: String(
+                    process.env.MC_DISPLAY_PORT ||
+                    status.port
+                ),
                 inline: true
             },
             {
@@ -188,6 +191,11 @@ async function sendActivityChanges(activityChannel, previousState, currentStatus
     for (const player of left) {
         await activityChannel.send(`👋 **${player}** left the Minecraft server.`);
     }
+
+console.log("Previous:", previousPlayers);
+console.log("Current:", currentPlayers);
+console.log("Joined:", joined);
+console.log("Left:", left);
 }
 
 async function updateStatus(client) {
