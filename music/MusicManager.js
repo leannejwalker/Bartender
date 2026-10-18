@@ -1,4 +1,3 @@
-const fs = require("fs");
 const {
     joinVoiceChannel,
     createAudioPlayer,
@@ -19,17 +18,16 @@ const NODE_PATH = process.env.YTDLP_NODE_PATH ||
     "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
 
 function getYtDlpCommonArgs() {
-    const args = ["--no-warnings", "--no-playlist"];
-
-    if (fs.existsSync(YOUTUBE_COOKIES)) {
-        args.push("--cookies", YOUTUBE_COOKIES);
-    }
-
-    if (fs.existsSync(NODE_PATH)) {
-        args.push("--js-runtimes", `node:${NODE_PATH}`);
-    }
-
-    return args;
+    return [
+        "--cookies",
+        YOUTUBE_COOKIES,
+        "--js-runtimes",
+        `node:${NODE_PATH}`,
+        "--extractor-args",
+        "youtube:player-client=mweb",
+        "--no-warnings",
+        "--no-playlist"
+    ];
 }
 
 class GuildMusic {
@@ -71,7 +69,11 @@ class GuildMusic {
             this.connection.state.status !== VoiceConnectionStatus.Destroyed;
 
         if (usable && this.connection.joinConfig.channelId === channel.id) {
-            await entersState(this.connection, VoiceConnectionStatus.Ready, 30_000);
+            await entersState(
+                this.connection,
+                VoiceConnectionStatus.Ready,
+                30_000
+            );
             return this.connection;
         }
 
@@ -91,7 +93,11 @@ class GuildMusic {
         connection.subscribe(this.player);
 
         try {
-            await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
+            await entersState(
+                connection,
+                VoiceConnectionStatus.Ready,
+                30_000
+            );
             return connection;
         } catch (error) {
             if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
@@ -100,7 +106,9 @@ class GuildMusic {
             if (this.connection === connection) {
                 this.connection = null;
             }
-            throw new Error(`Could not connect to the voice channel: ${error?.message || error}`);
+            throw new Error(
+                `Could not connect to the voice channel: ${error?.message || error}`
+            );
         }
     }
 
@@ -167,24 +175,40 @@ class GuildMusic {
         this.current = nextTrack;
 
         try {
+            const ytDlpArgs = [
+                ...getYtDlpCommonArgs(),
+                "--default-search",
+                "ytsearch",
+                "-f",
+                "bestaudio/best",
+                "-o",
+                "-",
+                nextTrack.url
+            ];
+
             const ytDlp = spawn(
                 YTDLP_PATH,
-                [
-                    ...getYtDlpCommonArgs(),
-                    "-f", "bestaudio/best",
-                    "-o", "-",
-                    nextTrack.url
-                ],
+                ytDlpArgs,
                 { stdio: ["ignore", "pipe", "pipe"] }
             );
 
             const ffmpeg = spawn(
                 FFMPEG_PATH,
                 [
-                    "-hide_banner", "-loglevel", "error",
-                    "-i", "pipe:0",
-                    "-vn", "-acodec", "pcm_s16le",
-                    "-f", "s16le", "-ar", "48000", "-ac", "2",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-i",
+                    "pipe:0",
+                    "-vn",
+                    "-acodec",
+                    "pcm_s16le",
+                    "-f",
+                    "s16le",
+                    "-ar",
+                    "48000",
+                    "-ac",
+                    "2",
                     "pipe:1"
                 ],
                 { stdio: ["pipe", "pipe", "pipe"] }
@@ -212,7 +236,10 @@ class GuildMusic {
             });
 
             ytDlp.once("error", error => {
-                console.error(`[Music:${this.guildId}] Could not start yt-dlp:`, error);
+                console.error(
+                    `[Music:${this.guildId}] Could not start yt-dlp:`,
+                    error
+                );
                 if (this.current === nextTrack) {
                     this.player.stop(true);
                 }
@@ -232,7 +259,10 @@ class GuildMusic {
             });
 
             ffmpeg.once("error", error => {
-                console.error(`[Music:${this.guildId}] Could not start FFmpeg:`, error);
+                console.error(
+                    `[Music:${this.guildId}] Could not start FFmpeg:`,
+                    error
+                );
                 if (this.current === nextTrack) {
                     this.player.stop(true);
                 }
@@ -242,8 +272,14 @@ class GuildMusic {
                 if (this.ffmpegProcess === ffmpeg) {
                     this.ffmpegProcess = null;
                 }
-                if (code !== 0 && code !== null && this.current === nextTrack) {
-                    console.error(`[Music:${this.guildId}] FFmpeg exited with code ${code}`);
+                if (
+                    code !== 0 &&
+                    code !== null &&
+                    this.current === nextTrack
+                ) {
+                    console.error(
+                        `[Music:${this.guildId}] FFmpeg exited with code ${code}`
+                    );
                 }
             });
 
@@ -280,11 +316,18 @@ class GuildMusic {
         }
     }
 
-    pause() { return this.player.pause(); }
-    resume() { return this.player.unpause(); }
+    pause() {
+        return this.player.pause();
+    }
+
+    resume() {
+        return this.player.unpause();
+    }
 
     skip() {
-        if (!this.current) return false;
+        if (!this.current) {
+            return false;
+        }
         this.current = null;
         this.killProcesses();
         return this.player.stop(true);
@@ -316,8 +359,10 @@ class GuildMusic {
     shuffle() {
         for (let index = this.queue.length - 1; index > 0; index--) {
             const randomIndex = Math.floor(Math.random() * (index + 1));
-            [this.queue[index], this.queue[randomIndex]] =
-                [this.queue[randomIndex], this.queue[index]];
+            [this.queue[index], this.queue[randomIndex]] = [
+                this.queue[randomIndex],
+                this.queue[index]
+            ];
         }
         return this.queue;
     }
@@ -344,48 +389,101 @@ class GuildMusic {
 }
 
 class MusicManager {
-    constructor() { this.guilds = new Map(); }
+    constructor() {
+        this.guilds = new Map();
+    }
 
     get(guildId) {
-        if (!guildId) throw new Error("A guild ID is required.");
+        if (!guildId) {
+            throw new Error("A guild ID is required.");
+        }
         if (!this.guilds.has(guildId)) {
             this.guilds.set(guildId, new GuildMusic(guildId));
         }
         return this.guilds.get(guildId);
     }
 
-    getExisting(guildId) { return this.guilds.get(guildId) || null; }
+    getExisting(guildId) {
+        return this.guilds.get(guildId) || null;
+    }
 
     getGuildData(guildId) {
         return this.getExisting(guildId)?.getData() || {
-            queue: [], current: null, position: 0, volume: 1,
-            loop: false, textChannel: null, connection: null,
+            queue: [],
+            current: null,
+            position: 0,
+            volume: 1,
+            loop: false,
+            textChannel: null,
+            connection: null,
             playerStatus: AudioPlayerStatus.Idle
         };
     }
 
-    getGuildDataPublic(guildId) { return this.getGuildData(guildId); }
-    connect(guildId, channel) { return this.get(guildId).connect(channel); }
-    setTextChannel(guildId, channel) { this.get(guildId).textChannel = channel; }
-    add(guildId, track) { return this.get(guildId).add(track); }
-    playNext(guildId) { return this.get(guildId).playNext(); }
-    pause(guildId) { return this.get(guildId).pause(); }
-    resume(guildId) { return this.get(guildId).resume(); }
-    skip(guildId) { return this.get(guildId).skip(); }
-    stop(guildId) { return this.get(guildId).stop(); }
-    setVolume(guildId, volume) { return this.get(guildId).setVolume(volume); }
-    toggleLoop(guildId) { return this.get(guildId).toggleLoop(); }
-    shuffle(guildId) { return this.get(guildId).shuffle(); }
-    clearQueue(guildId) { return this.get(guildId).clearQueue(); }
+    getGuildDataPublic(guildId) {
+        return this.getGuildData(guildId);
+    }
+
+    connect(guildId, channel) {
+        return this.get(guildId).connect(channel);
+    }
+
+    setTextChannel(guildId, channel) {
+        this.get(guildId).textChannel = channel;
+    }
+
+    add(guildId, track) {
+        return this.get(guildId).add(track);
+    }
+
+    playNext(guildId) {
+        return this.get(guildId).playNext();
+    }
+
+    pause(guildId) {
+        return this.get(guildId).pause();
+    }
+
+    resume(guildId) {
+        return this.get(guildId).resume();
+    }
+
+    skip(guildId) {
+        return this.get(guildId).skip();
+    }
+
+    stop(guildId) {
+        return this.get(guildId).stop();
+    }
+
+    setVolume(guildId, volume) {
+        return this.get(guildId).setVolume(volume);
+    }
+
+    toggleLoop(guildId) {
+        return this.get(guildId).toggleLoop();
+    }
+
+    shuffle(guildId) {
+        return this.get(guildId).shuffle();
+    }
+
+    clearQueue(guildId) {
+        return this.get(guildId).clearQueue();
+    }
 
     async disconnect(guildId) {
         const music = this.getExisting(guildId);
-        if (!music) return;
+        if (!music) {
+            return;
+        }
         await music.disconnect();
         this.guilds.delete(guildId);
     }
 
-    async remove(guildId) { await this.disconnect(guildId); }
+    async remove(guildId) {
+        await this.disconnect(guildId);
+    }
 }
 
 const musicManager = new MusicManager();
