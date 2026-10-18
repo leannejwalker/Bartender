@@ -13,10 +13,13 @@ const { spawn } = require("child_process");
 
 const YTDLP_PATH = process.env.YTDLP_PATH || "/usr/local/bin/yt-dlp";
 const FFMPEG_PATH = process.env.FFMPEG_PATH || "/usr/bin/ffmpeg";
-const YOUTUBE_COOKIES = process.env.YOUTUBE_COOKIES ||
-    "../cookies/youtube.txt";
+const path = require("path");
+
+const YOUTUBE_COOKIES =
+    process.env.YOUTUBE_COOKIES ||
+    path.join(__dirname, "..", "cookies", "youtube.txt");
 const NODE_PATH = process.env.YTDLP_NODE_PATH ||
-    "../../.nvm/versions/node/v24.21.0/bin/node";
+    path.join(__dirname, "..", ".nvm", "versions", "node", "v24.21.0", "bin", "node");
 
 function getYtDlpCommonArgs() {
     const args = ["--no-warnings", "--no-playlist"];
