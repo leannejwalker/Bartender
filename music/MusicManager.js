@@ -1,4 +1,3 @@
-const fs = require("fs");
 const {
     joinVoiceChannel,
     createAudioPlayer,
@@ -19,20 +18,19 @@ const YOUTUBE_COOKIES =
     process.env.YOUTUBE_COOKIES ||
     path.join(__dirname, "..", "cookies", "youtube.txt");
 const NODE_PATH = process.env.YTDLP_NODE_PATH ||
-    path.join(__dirname, "..", ".nvm", "versions", "node", "v24.21.0", "bin", "node");
+    "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
 
 function getYtDlpCommonArgs() {
-    const args = ["--no-warnings", "--no-playlist"];
-
-    if (fs.existsSync(YOUTUBE_COOKIES)) {
-        args.push("--cookies", YOUTUBE_COOKIES);
-    }
-
-    if (fs.existsSync(NODE_PATH)) {
-        args.push("--js-runtimes", `node:${NODE_PATH}`);
-    }
-
-    return args;
+    return [
+        "--cookies",
+        YOUTUBE_COOKIES,
+        "--js-runtimes",
+        `node:${NODE_PATH}`,
+        "--extractor-args",
+        "youtube:player-client=mweb",
+        "--no-warnings",
+        "--no-playlist"
+    ];
 }
 
 class GuildMusic {
@@ -170,14 +168,23 @@ class GuildMusic {
         this.current = nextTrack;
 
         try {
+            const ytDlpArgs = [
+                ...getYtDlpCommonArgs(),
+                "-f",
+                "251/bestaudio/best",
+                "-o",
+                "-",
+                nextTrack.url
+            ];
+
+            console.log(
+                `[Music:${this.guildId}] yt-dlp arguments:`,
+                JSON.stringify(ytDlpArgs)
+            );
+
             const ytDlp = spawn(
                 YTDLP_PATH,
-                [
-                    ...getYtDlpCommonArgs(),
-                    "-f", "bestaudio/best",
-                    "-o", "-",
-                    nextTrack.url
-                ],
+                ytDlpArgs,
                 { stdio: ["ignore", "pipe", "pipe"] }
             );
 
