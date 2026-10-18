@@ -27,7 +27,6 @@ function getYtDlpCommonArgs() {
         "--js-runtimes",
         `node:${NODE_PATH}`,
         "--extractor-args",
-        "youtube:player-client=mweb",
         "--no-warnings",
         "--no-playlist"
     ];
@@ -168,10 +167,10 @@ class GuildMusic {
         this.current = nextTrack;
 
         try {
-            const ytDlpArgs = [
+           const ytDlpArgs = [
                 ...getYtDlpCommonArgs(),
                 "-f",
-                "251/bestaudio/best",
+                "bestaudio*/best",
                 "-o",
                 "-",
                 nextTrack.url
@@ -228,16 +227,24 @@ class GuildMusic {
                 }
             });
 
-            ytDlp.once("close", code => {
-                if (this.ytDlpProcess === ytDlp) {
-                    this.ytDlpProcess = null;
-                }
-                if (code !== 0 && this.current === nextTrack) {
+            ytDlp.once("close", async code => {
+                if (code !== 0) {
                     console.error(
                         `[Music:${this.guildId}] yt-dlp failed (${code}):`,
-                        ytDlpError.trim() || "No error details returned."
+                        ytDlpError.trim()
                     );
-                    this.player.stop(true);
+
+                    try {
+                        const formats = await runYtDlp([
+                            ...getYtDlpCommonArgs(),
+                            "-F",
+                            nextTrack.url
+                        ]);
+                        console.error("Available formats:\n", formats);
+                    } catch (err) {
+                        console.error("Could not retrieve format list:", err);
+                    }
+                this.player.stop(true);
                 }
             });
 
