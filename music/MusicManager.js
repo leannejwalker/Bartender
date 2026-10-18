@@ -13,9 +13,9 @@ const { spawn } = require("child_process");
 const YTDLP_PATH = process.env.YTDLP_PATH || "/usr/local/bin/yt-dlp";
 const FFMPEG_PATH = process.env.FFMPEG_PATH || "/usr/bin/ffmpeg";
 const YOUTUBE_COOKIES = process.env.YOUTUBE_COOKIES ||
-    "/home/bartenderadmin/Bartender/cookies/youtube.txt";
+    "../cookies/youtube.txt";
 const NODE_PATH = process.env.YTDLP_NODE_PATH ||
-    "/home/bartenderadmin/.nvm/versions/node/v24.21.0/bin/node";
+    "../.nvm/versions/node/v24.21.0/bin/node";
 
 function getYtDlpCommonArgs() {
     return [
