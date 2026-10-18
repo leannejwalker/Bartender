@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require("discord.js");
-const musicManager = require("../../music/MusicManager");
+const musicManager = require("../../dependencies/MusicManager");
 module.exports = {
     data: new SlashCommandBuilder().setName("join").setDescription("Join your current voice channel"),
     async execute(interaction) {

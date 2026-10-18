@@ -12,7 +12,16 @@ require("dotenv").config();
 const statsManager = require("./database/StatsManager");
 
 const { startMinecraftStatus } = require(
-    "./minecraft/MinecraftStatus"
+    "./dependencies/MinecraftStatus"
+);
+const economyManager = require(
+    "./dependencies/EconomyManager"
+);
+
+const {
+    startDailyEconomyReport
+} = require(
+    "./dependencies/DailyEconomyReport"
 );
 
 const client = new Client({
@@ -91,6 +100,7 @@ client.once("ready", () => {
     );
 
     startMinecraftStatus(client);
+    startDailyEconomyReport(client);
 });
 
 client.on("messageCreate", message => {
@@ -99,6 +109,17 @@ client.on("messageCreate", message => {
     } catch (error) {
         console.error(
             "[Stats] Message tracking error:",
+            error
+        );
+    }
+
+    try {
+        economyManager.rewardMessage(
+            message
+        );
+    } catch (error) {
+        console.error(
+            "[Economy] Message reward error:",
             error
         );
     }
@@ -134,7 +155,7 @@ client.on(
          */
         if (interaction.isButton()) {
             const musicManager = require(
-                "./music/MusicManager"
+                "./dependencies/MusicManager"
             );
 
             const guildId =

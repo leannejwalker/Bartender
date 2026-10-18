@@ -3,7 +3,7 @@ const {
 } = require("discord.js");
 
 const musicManager =
-    require("../../music/MusicManager");
+    require("../../dependencies/MusicManager");
 
 module.exports = {
     data: new SlashCommandBuilder()

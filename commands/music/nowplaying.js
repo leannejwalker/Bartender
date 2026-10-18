@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const musicManager = require("../../music/MusicManager");
+const musicManager = require("../../dependencies/MusicManager");
 
 function formatTime(seconds) {
     seconds = Math.floor(Math.max(0, Number(seconds) || 0));

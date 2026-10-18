@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
 const { spawn } = require("child_process");
-const musicManager = require("../../music/MusicManager");
+const musicManager = require("../../dependencies/MusicManager");
 
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {

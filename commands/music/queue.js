@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const musicManager = require("../../music/MusicManager");
+const musicManager = require("../../dependencies/MusicManager");
 module.exports = {
     data: new SlashCommandBuilder().setName("queue").setDescription("Show the music queue"),
     async execute(interaction) {
