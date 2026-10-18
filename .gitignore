@@ -2,3 +2,7 @@
 node_modules
 database/bartender-bucks.json
 database/bartender-bucks.json.tmp
+database/random-events.json
+database/random-events.json.tmp
+database/StatsManager.json
+database/StatsManager.json.tmp
