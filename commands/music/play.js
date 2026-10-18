@@ -1,604 +1,141 @@
-const {
-    SlashCommandBuilder
-} = require("discord.js");
-
-const { spawn } =
-    require("child_process");
-
-const musicManager =
-    require("../../music/MusicManager");
-
-const YTDLP_PATH =
-    "/usr/local/bin/yt-dlp";
-
-const YTDLP_COMMON_ARGS =
-    musicManager.YTDLP_COMMON_ARGS;
+const { SlashCommandBuilder } = require("discord.js");
+const { spawn } = require("child_process");
+const musicManager = require("../../music/MusicManager");
 
 function runYtDlp(args) {
-    return new Promise(
-        (resolve, reject) => {
-            const ytDlp = spawn(
-                YTDLP_PATH,
-                args,
-                {
-                    stdio: [
-                        "ignore",
-                        "pipe",
-                        "pipe"
-                    ]
-                }
-            );
-
-            let stdout = "";
-            let stderr = "";
-            let settled = false;
-
-            ytDlp.stdout.setEncoding(
-                "utf8"
-            );
-
-            ytDlp.stderr.setEncoding(
-                "utf8"
-            );
-
-            const succeed = value => {
-                if (settled) {
-                    return;
-                }
-
-                settled = true;
-                resolve(value);
-            };
-
-            const fail = error => {
-                if (settled) {
-                    return;
-                }
-
-                settled = true;
-                reject(error);
-            };
-
-            ytDlp.stdout.on(
-                "data",
-                chunk => {
-                    stdout += chunk;
-                }
-            );
-
-            ytDlp.stderr.on(
-                "data",
-                chunk => {
-                    stderr += chunk;
-                }
-            );
-
-            ytDlp.once(
-                "error",
-                fail
-            );
-
-            ytDlp.once(
-                "close",
-                code => {
-                    if (code !== 0) {
-                        fail(
-                            new Error(
-                                stderr.trim() ||
-                                `yt-dlp exited with code ${code}`
-                            )
-                        );
-
-                        return;
-                    }
-
-                    succeed(stdout);
-                }
-            );
-        }
-    );
+    return new Promise((resolve, reject) => {
+        const process = spawn(musicManager.YTDLP_PATH, args, {
+            stdio: ["ignore", "pipe", "pipe"]
+        });
+        let stdout = "";
+        let stderr = "";
+        process.stdout.setEncoding("utf8");
+        process.stderr.setEncoding("utf8");
+        process.stdout.on("data", chunk => { stdout += chunk; });
+        process.stderr.on("data", chunk => { stderr += chunk; });
+        process.once("error", reject);
+        process.once("close", code => {
+            if (code !== 0) {
+                reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}`));
+            } else {
+                resolve(stdout);
+            }
+        });
+    });
 }
 
 function isYouTubeUrl(value) {
     try {
-        const url = new URL(value);
-
-        const hostname =
-            url.hostname
-                .toLowerCase()
-                .replace(/^www\./, "");
-
-        return [
-            "youtube.com",
-            "m.youtube.com",
-            "music.youtube.com",
-            "youtu.be"
-        ].includes(hostname);
-    } catch {
-        return false;
-    }
+        const hostname = new URL(value).hostname.toLowerCase().replace(/^www\./, "");
+        return ["youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"].includes(hostname);
+    } catch { return false; }
 }
 
-function getVideoUrl(info) {
-    if (
-        typeof info?.webpage_url ===
-            "string" &&
-        info.webpage_url
-    ) {
-        return info.webpage_url;
-    }
-
-    if (
-        typeof info?.original_url ===
-            "string" &&
-        isYouTubeUrl(info.original_url)
-    ) {
-        return info.original_url;
-    }
-
-    if (info?.id) {
-        return (
-            "https://www.youtube.com/" +
-            `watch?v=${info.id}`
-        );
-    }
-
-    return null;
-}
-
-async function searchYouTube(query) {
-    const output = await runYtDlp([
-        ...YTDLP_COMMON_ARGS,
-        "--flat-playlist",
-        "--dump-single-json",
-        `ytsearch1:${query}`
-    ]);
-
-    let data;
-
-    try {
-        data = JSON.parse(output);
-    } catch {
-        throw new Error(
-            "YouTube search returned invalid data."
-        );
-    }
-
-    const entry =
-        data.entries?.[0];
-
-    if (!entry) {
-        throw new Error(
-            "No YouTube results were found."
-        );
-    }
-
-    return entry;
+function videoUrl(info) {
+    if (typeof info?.webpage_url === "string" && info.webpage_url) return info.webpage_url;
+    if (typeof info?.original_url === "string" && isYouTubeUrl(info.original_url)) return info.original_url;
+    return info?.id ? `https://www.youtube.com/watch?v=${info.id}` : null;
 }
 
 async function getVideoInfo(query) {
-    let videoUrl;
-
-    if (isYouTubeUrl(query)) {
-        videoUrl = query;
-    } else {
-        const result =
-            await searchYouTube(query);
-
-        videoUrl =
-            getVideoUrl(result);
-    }
-
-    if (!videoUrl) {
-        throw new Error(
-            "YouTube returned a result without a video URL."
-        );
-    }
-
+    const target = isYouTubeUrl(query) ? query : `ytsearch1:${query}`;
     const output = await runYtDlp([
-        ...YTDLP_COMMON_ARGS,
+        ...musicManager.getYtDlpCommonArgs(),
         "--dump-single-json",
-        "-f",
-        "bestaudio/best",
-        videoUrl
+        "--flat-playlist",
+        target
     ]);
+    const data = JSON.parse(output);
+    const info = Array.isArray(data.entries) ? data.entries[0] : data;
+    if (!info) throw new Error("No YouTube results were found.");
 
-    try {
-        return JSON.parse(output);
-    } catch {
-        throw new Error(
-            "YouTube returned invalid video information."
-        );
-    }
+    const url = videoUrl(info);
+    if (!url) throw new Error("YouTube returned no usable video URL.");
+
+    const detailedOutput = await runYtDlp([
+        ...musicManager.getYtDlpCommonArgs(),
+        "--dump-single-json",
+        "--skip-download",
+        url
+    ]);
+    return JSON.parse(detailedOutput);
 }
 
-function getThumbnail(info) {
-    if (
-        typeof info?.thumbnail ===
-            "string" &&
-        info.thumbnail.startsWith(
-            "https://"
-        )
-    ) {
-        return info.thumbnail;
-    }
-
-    if (info?.id) {
-        return (
-            "https://i.ytimg.com/vi/" +
-            `${info.id}/hqdefault.jpg`
-        );
-    }
-
-    return null;
+function clean(value, fallback, max) {
+    if (typeof value !== "string" || !value.trim()) return fallback;
+    return value.replace(/\s+/g, " ").trim().slice(0, max);
 }
 
-function cleanTitle(title) {
-    if (
-        typeof title !== "string" ||
-        !title.trim()
-    ) {
-        return "Unknown Track";
-    }
-
-    return title
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 200);
+function escapeMarkdown(value) {
+    return String(value).replace(/([\\`*_{}\[\]()#+\-.!|>~])/g, "\\$1");
 }
 
-function cleanChannelName(name) {
-    if (
-        typeof name !== "string" ||
-        !name.trim()
-    ) {
-        return "YouTube";
+function safeError(error) {
+    const text = String(error?.message || error).toLowerCase();
+    if (text.includes("sign in to confirm") || text.includes("not a bot")) {
+        return "YouTube blocked the server request. Refresh the cookies file and update yt-dlp.";
     }
-
-    return name
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 100);
-}
-
-function escapeDiscordMarkdown(value) {
-    return String(value).replace(
-        /([\\`*_{}[\]()#+\-.!|>~])/g,
-        "\\$1"
-    );
-}
-
-function getSafeErrorMessage(error) {
-    const message = String(
-        error?.message || error
-    );
-
-    const normalized =
-        message.toLowerCase();
-
-    if (
-        normalized.includes(
-            "no youtube results"
-        )
-    ) {
-        return (
-            "No YouTube results were found " +
-            "for that search."
-        );
-    }
-
-    if (
-        normalized.includes(
-            "verification"
-        ) ||
-        normalized.includes(
-            "sign in to confirm"
-        ) ||
-        normalized.includes(
-            "confirm you're not a bot"
-        )
-    ) {
-        return (
-            "YouTube's verification challenge " +
-            "could not be completed."
-        );
-    }
-
-    if (
-        normalized.includes(
-            "video unavailable"
-        )
-    ) {
-        return (
-            "That video is unavailable."
-        );
-    }
-
-    if (
-        normalized.includes(
-            "private video"
-        )
-    ) {
-        return (
-            "That video is private."
-        );
-    }
-
-    if (
-        normalized.includes(
-            "members-only"
-        )
-    ) {
-        return (
-            "That video is restricted to channel members."
-        );
-    }
-
-    if (
-        normalized.includes(
-            "age-restricted"
-        )
-    ) {
-        return (
-            "That video is age restricted and could not be loaded."
-        );
-    }
-
-    if (
-        normalized.includes(
-            "unsupported url"
-        )
-    ) {
-        return (
-            "That YouTube URL is not supported."
-        );
-    }
-
-    if (
-        normalized.includes(
-            "could not connect to the voice channel"
-        )
-    ) {
-        return (
-            "I could not connect to your voice channel."
-        );
-    }
-
-    return (
-        "The track could not be loaded. " +
-        "Check the URL or try another search."
-    );
+    if (text.includes("private video")) return "That video is private.";
+    if (text.includes("video unavailable")) return "That video is unavailable.";
+    if (text.includes("no youtube results")) return "No YouTube results were found.";
+    return "The track could not be loaded. Check the bot console for the yt-dlp error.";
 }
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("play")
-        .setDescription(
-            "Play a song or resume the current music"
-        )
-        .addStringOption(option =>
-            option
-                .setName("query")
-                .setDescription(
-                    "YouTube URL or song name"
-                )
-                .setMaxLength(200)
-                .setRequired(false)
-        ),
+        .setDescription("Play a YouTube song or resume playback")
+        .addStringOption(option => option
+            .setName("query")
+            .setDescription("YouTube URL or song name")
+            .setMaxLength(200)
+            .setRequired(false)),
 
     async execute(interaction) {
         if (!interaction.guildId) {
-            return interaction.reply({
-                content:
-                    "❌ This command can only be used in a server.",
-                ephemeral: true
-            });
+            return interaction.reply({ content: "This command only works in a server.", ephemeral: true });
+        }
+        const voiceChannel = interaction.member?.voice?.channel;
+        if (!voiceChannel) {
+            return interaction.reply({ content: "Join a voice channel first.", ephemeral: true });
         }
 
-        const memberChannel =
-            interaction.member
-                ?.voice
-                ?.channel;
-
-        if (!memberChannel) {
-            return interaction.reply({
-                content:
-                    "❌ You need to be in a voice channel first.",
-                ephemeral: true
-            });
-        }
-
-        const query =
-            interaction.options
-                .getString("query")
-                ?.trim();
-
+        const query = interaction.options.getString("query")?.trim();
         if (!query) {
-            try {
-                const data =
-                    musicManager.getGuildData(
-                        interaction.guildId
-                    );
-
-                if (data.current) {
-                    await musicManager.connect(
-                        interaction.guildId,
-                        memberChannel
-                    );
-
-                    musicManager.setTextChannel(
-                        interaction.guildId,
-                        interaction.channel
-                    );
-
-                    const resumed =
-                        musicManager.resume(
-                            interaction.guildId
-                        );
-
-                    if (resumed) {
-                        return interaction.reply(
-                            "▶️ Resumed the current song."
-                        );
-                    }
-
-                    return interaction.reply({
-                        content:
-                            "ℹ️ The current song is already playing.",
-                        ephemeral: true
-                    });
-                }
-
-                if (data.queue.length > 0) {
-                    await musicManager.connect(
-                        interaction.guildId,
-                        memberChannel
-                    );
-
-                    musicManager.setTextChannel(
-                        interaction.guildId,
-                        interaction.channel
-                    );
-
-                    const started =
-                        await musicManager.playNext(
-                            interaction.guildId
-                        );
-
-                    if (started) {
-                        return interaction.reply(
-                            "▶️ Started the music queue."
-                        );
-                    }
-                }
-
-                return interaction.reply({
-                    content:
-                        "🎵 Nothing is paused or queued. " +
-                        "Use `/play query:<song>` to start music.",
-                    ephemeral: true
-                });
-            } catch (error) {
-                console.error(
-                    "[Music] Resume error:",
-                    error
-                );
-
-                return interaction.reply({
-                    content:
-                        `❌ ${getSafeErrorMessage(error)}`,
-                    ephemeral: true
-                });
+            const data = musicManager.getGuildData(interaction.guildId);
+            if (!data.current) {
+                return interaction.reply({ content: "Nothing is paused or queued.", ephemeral: true });
             }
+            await musicManager.connect(interaction.guildId, voiceChannel);
+            const resumed = musicManager.resume(interaction.guildId);
+            return interaction.reply(resumed ? "Resumed playback." : "The track is already playing.");
         }
 
         await interaction.deferReply();
-
         try {
-            console.log(
-                `[Music] Searching YouTube for: ${query}`
-            );
-
-            const info =
-                await getVideoInfo(query);
-
-            const videoUrl =
-                getVideoUrl(info);
-
-            if (!videoUrl) {
-                throw new Error(
-                    "Could not determine the YouTube video URL."
-                );
-            }
-
+            const info = await getVideoInfo(query);
+            const url = videoUrl(info);
             const track = {
-                title:
-                    cleanTitle(info.title),
-
-                url:
-                    videoUrl,
-
-                durationInSec:
-                    Number.isFinite(
-                        Number(info.duration)
-                    )
-                        ? Number(
-                            info.duration
-                        )
-                        : 0,
-
-                thumbnail:
-                    getThumbnail(info),
-
-                channel:
-                    cleanChannelName(
-                        info.uploader ||
-                        info.channel
-                    ),
-
-                requestedBy:
-                    interaction.user.toString()
+                title: clean(info.title, "Unknown Track", 200),
+                url,
+                durationInSec: Number.isFinite(Number(info.duration)) ? Number(info.duration) : 0,
+                thumbnail: typeof info.thumbnail === "string" ? info.thumbnail : null,
+                channel: clean(info.uploader || info.channel, "YouTube", 100),
+                requestedBy: interaction.user.toString()
             };
 
-            console.log(
-                "[Music] Track metadata:",
-                JSON.stringify(
-                    track,
-                    null,
-                    2
-                )
-            );
+            const before = musicManager.getGuildData(interaction.guildId);
+            await musicManager.connect(interaction.guildId, voiceChannel);
+            musicManager.setTextChannel(interaction.guildId, interaction.channel);
+            await musicManager.add(interaction.guildId, track);
 
-            const existingData =
-                musicManager.getGuildData(
-                    interaction.guildId
-                );
-
-            const wasPlaying =
-                Boolean(
-                    existingData.current
-                );
-
-            await musicManager.connect(
-                interaction.guildId,
-                memberChannel
-            );
-
-            musicManager.setTextChannel(
-                interaction.guildId,
-                interaction.channel
-            );
-
-            await musicManager.add(
-                interaction.guildId,
-                track
-            );
-
-            const safeTitle =
-                escapeDiscordMarkdown(
-                    track.title
-                );
-
-            if (wasPlaying) {
-                await interaction.editReply(
-                    `🎵 Added **${safeTitle}** to the queue.`
-                );
-
-                return;
-            }
-
-            await interaction.editReply(
-                `▶️ Now playing **${safeTitle}**`
-            );
+            const title = escapeMarkdown(track.title);
+            await interaction.editReply(before.current
+                ? `Added **${title}** to the queue.`
+                : `Now playing **${title}**`);
         } catch (error) {
-            console.error(
-                "[Music] Play command error:",
-                error
-            );
-
-            await interaction.editReply(
-                `❌ ${getSafeErrorMessage(error)}`
-            );
+            console.error("[Music] Play command error:", error);
+            await interaction.editReply(`Could not play: ${safeError(error)}`);
         }
     }
 };

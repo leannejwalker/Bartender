@@ -1,31 +1,9 @@
-const {
-    SlashCommandBuilder
-} = require("discord.js");
-
-const musicManager =
-    require("../../music/MusicManager");
-
+const { SlashCommandBuilder } = require("discord.js");
+const musicManager = require("../../music/MusicManager");
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName("skip")
-        .setDescription(
-            "Skip the current song"
-        ),
-
+    data: new SlashCommandBuilder().setName("skip").setDescription("Skip the current track"),
     async execute(interaction) {
-        const success =
-            await musicManager.skip(
-                interaction.guild.id
-            );
-
-        if (!success) {
-            return interaction.reply(
-                "❌ Nothing is currently playing."
-            );
-        }
-
-        await interaction.reply(
-            "⏭️ Skipped."
-        );
+        const success = musicManager.skip(interaction.guildId);
+        return interaction.reply(success ? "Skipped." : "Nothing is currently playing.");
     }
 };
