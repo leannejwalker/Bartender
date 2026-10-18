@@ -11,6 +11,10 @@ require("dotenv").config();
 
 const statsManager = require("./database/StatsManager");
 
+const { startMinecraftStatus } = require(
+    "./minecraft/MinecraftStatus"
+);
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -85,6 +89,8 @@ client.once("ready", () => {
     console.log(
         "📊 Statistics database connected."
     );
+
+    startMinecraftStatus(client);
 });
 
 client.on("messageCreate", message => {
