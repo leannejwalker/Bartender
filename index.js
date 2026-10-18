@@ -24,6 +24,12 @@ const {
     "./dependencies/DailyEconomyReport"
 );
 
+const {
+    startBartenderTraders
+    } = require(
+        "./dependencies/BartenderTraders"
+    );
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -90,7 +96,7 @@ for (const filePath of commandFiles) {
     }
 }
 
-client.once("ready", () => {
+client.once("clientReady", () => {
     console.log(
         `🍺 Bartender online as ${client.user.tag}`
     );
@@ -101,6 +107,7 @@ client.once("ready", () => {
 
     startMinecraftStatus(client);
     startDailyEconomyReport(client);
+    startBartenderTraders(client);
 });
 
 client.on("messageCreate", message => {

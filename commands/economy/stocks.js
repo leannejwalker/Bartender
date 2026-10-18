@@ -8,7 +8,7 @@ const {
     MessageFlags
 } = require("discord.js");
 
-const economy = require("../../economy/EconomyManager");
+const economy = require("../../dependencies/EconomyManager");
 
 const DATABASE_FILE = path.join(
     __dirname,
@@ -18,6 +18,18 @@ const TEMP_FILE = `${DATABASE_FILE}.tmp`;
 const UPDATE_INTERVAL_MS = 30 * 60 * 1000;
 const MAX_CATCH_UPDATES = 48;
 const MAX_SHARES_PER_TRANSACTION = 10000;
+
+/* Random volatility and crash safeguards. */
+const MIN_RANDOM_VOLATILITY = 0.005;
+const MAX_RANDOM_VOLATILITY = 0.03;
+const MAX_NORMAL_DROP = 0.025;
+const MAX_NEWS_DROP = 0.04;
+const MAX_TOTAL_RISE = 0.08;
+const SOFT_24H_DROP_LIMIT = 0.15;
+const HARD_24H_DROP_LIMIT = 0.25;
+const SOFT_LIMIT_MAX_DROP = 0.01;
+const PRICE_FLOOR = 1;
+const HISTORY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const activeTransactions = new Set();
 
@@ -198,7 +210,14 @@ function createInitialDatabase() {
             price: company.startingPrice,
             previousPrice: company.startingPrice,
             percentageChange: 0,
-            lastUpdated: Date.now()
+            currentVolatility: 0,
+            lastUpdated: Date.now(),
+            priceHistory: [
+                {
+                    timestamp: Date.now(),
+                    price: company.startingPrice
+                }
+            ]
         };
     }
 
@@ -270,8 +289,36 @@ function normaliseDatabase(database) {
         );
         existing.percentageChange =
             Number(existing.percentageChange) || 0;
+        existing.currentVolatility = Math.max(
+            0,
+            Number(existing.currentVolatility) || 0
+        );
         existing.lastUpdated =
             Number(existing.lastUpdated) || Date.now();
+
+        if (!Array.isArray(existing.priceHistory)) {
+            existing.priceHistory = [];
+        }
+
+        existing.priceHistory = existing.priceHistory
+            .filter(entry => {
+                return (
+                    entry &&
+                    Number.isFinite(Number(entry.timestamp)) &&
+                    Number.isFinite(Number(entry.price))
+                );
+            })
+            .map(entry => ({
+                timestamp: Number(entry.timestamp),
+                price: Math.max(PRICE_FLOOR, Math.round(Number(entry.price)))
+            }));
+
+        if (existing.priceHistory.length === 0) {
+            existing.priceHistory.push({
+                timestamp: existing.lastUpdated,
+                price: existing.price
+            });
+        }
     }
 
     return database;
@@ -340,6 +387,39 @@ function getHolding(portfolio, ticker) {
     return holding;
 }
 
+function cleanPriceHistory(stock, updateTime) {
+    const cutoff = updateTime - HISTORY_WINDOW_MS;
+
+    if (!Array.isArray(stock.priceHistory)) {
+        stock.priceHistory = [];
+    }
+
+    stock.priceHistory = stock.priceHistory.filter(entry => {
+        return (
+            entry &&
+            Number(entry.timestamp) >= cutoff &&
+            Number.isFinite(Number(entry.price))
+        );
+    });
+}
+
+function getTwentyFourHourDrop(stock, currentPrice) {
+    if (!Array.isArray(stock.priceHistory) || stock.priceHistory.length === 0) {
+        return 0;
+    }
+
+    const referencePrice = Math.max(
+        PRICE_FLOOR,
+        Number(stock.priceHistory[0].price) || currentPrice
+    );
+
+    if (currentPrice >= referencePrice) {
+        return 0;
+    }
+
+    return (referencePrice - currentPrice) / referencePrice;
+}
+
 function applyOneMarketUpdate(database, updateTime) {
     let selectedNews = null;
 
@@ -351,24 +431,50 @@ function applyOneMarketUpdate(database, updateTime) {
 
     for (const company of COMPANIES) {
         const stock = database.stocks[company.ticker];
-        const oldPrice = Math.max(1, Math.round(stock.price));
+        const oldPrice = Math.max(PRICE_FLOOR, Math.round(stock.price));
 
-        let movement = randomDecimal(
-            -company.volatility,
-            company.volatility
+        cleanPriceHistory(stock, updateTime);
+
+        const randomVolatility = randomDecimal(
+            MIN_RANDOM_VOLATILITY,
+            MAX_RANDOM_VOLATILITY
+        );
+        const riskMultiplier = Math.max(0.75, company.volatility / 0.06);
+        const effectiveVolatility = Math.min(
+            MAX_RANDOM_VOLATILITY,
+            randomVolatility * riskMultiplier
         );
 
-        if (selectedNews && selectedNews.ticker === company.ticker) {
+        stock.currentVolatility = effectiveVolatility;
+
+        let movement = randomDecimal(
+            -effectiveVolatility,
+            effectiveVolatility
+        );
+
+        const hasCompanyNews =
+            selectedNews && selectedNews.ticker === company.ticker;
+
+        if (hasCompanyNews) {
             movement += randomDecimal(
                 selectedNews.minChange,
                 selectedNews.maxChange
             );
         }
 
-        movement = Math.max(-0.30, Math.min(0.30, movement));
+        const rollingDrop = getTwentyFourHourDrop(stock, oldPrice);
+        let maximumDrop = hasCompanyNews ? MAX_NEWS_DROP : MAX_NORMAL_DROP;
+
+        if (rollingDrop >= HARD_24H_DROP_LIMIT) {
+            maximumDrop = 0;
+        } else if (rollingDrop >= SOFT_24H_DROP_LIMIT) {
+            maximumDrop = Math.min(maximumDrop, SOFT_LIMIT_MAX_DROP);
+        }
+
+        movement = Math.max(-maximumDrop, Math.min(MAX_TOTAL_RISE, movement));
 
         const newPrice = Math.max(
-            1,
+            PRICE_FLOOR,
             Math.round(oldPrice * (1 + movement))
         );
 
@@ -376,6 +482,10 @@ function applyOneMarketUpdate(database, updateTime) {
         stock.price = newPrice;
         stock.percentageChange = (newPrice - oldPrice) / oldPrice;
         stock.lastUpdated = updateTime;
+        stock.priceHistory.push({
+            timestamp: updateTime,
+            price: newPrice
+        });
     }
 
     database.latestNews = selectedNews
@@ -471,7 +581,8 @@ function createMarketEmbed(database, client) {
                 "",
                 `📰 **Latest news:** ${database.latestNews}`,
                 "",
-                "Prices update every 30 minutes when the market is accessed."
+                "Prices update every 30 minutes when the market is accessed.",
+                "Falls are capped and protected by a rolling 24-hour circuit breaker."
             ].join("\n")
         );
 
@@ -484,6 +595,7 @@ function createMarketEmbed(database, client) {
             value:
                 `Price: **${economy.formatBucks(stock.price)} BB**\n` +
                 `${movementEmoji(change)} Movement: **${formatPercent(change)}**\n` +
+                `Current volatility: **${formatPercent(stock.currentVolatility || 0)}**\n` +
                 company.description,
             inline: false
         });
@@ -503,7 +615,59 @@ function createChoices() {
     }));
 }
 
+/*
+ * Used by BartenderTraders.js. This runs the same guarded market update
+ * used by /stocks, then returns a before-and-after snapshot for notices.
+ */
+function runScheduledMarketUpdates() {
+    const beforeDatabase = loadDatabase();
+    const before = {};
+
+    for (const company of COMPANIES) {
+        const stock = beforeDatabase.stocks[company.ticker];
+        before[company.ticker] = {
+            price: stock.price,
+            percentageChange: stock.percentageChange || 0
+        };
+    }
+
+    const updated = updateMarketIfRequired(beforeDatabase);
+
+    if (!updated) {
+        return {
+            updated: false,
+            latestNews: beforeDatabase.latestNews,
+            lastMarketUpdate: beforeDatabase.lastMarketUpdate,
+            companies: COMPANIES,
+            before,
+            after: before
+        };
+    }
+
+    const afterDatabase = loadDatabase();
+    const after = {};
+
+    for (const company of COMPANIES) {
+        const stock = afterDatabase.stocks[company.ticker];
+        after[company.ticker] = {
+            price: stock.price,
+            percentageChange: stock.percentageChange || 0,
+            currentVolatility: stock.currentVolatility || 0
+        };
+    }
+
+    return {
+        updated: true,
+        latestNews: afterDatabase.latestNews,
+        lastMarketUpdate: afterDatabase.lastMarketUpdate,
+        companies: COMPANIES,
+        before,
+        after
+    };
+}
+
 module.exports = {
+    runScheduledMarketUpdates,
     data: new SlashCommandBuilder()
         .setName("stocks")
         .setDescription("Trade fictional shares using Bartender Bucks.")
