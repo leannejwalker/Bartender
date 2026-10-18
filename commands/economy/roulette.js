@@ -7,7 +7,7 @@ const {
 } = require("discord.js");
 
 const economy = require(
-    "../../economy/EconomyManager"
+    "../../dependencies/EconomyManager"
 );
 
 /*
