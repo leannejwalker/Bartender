@@ -26,7 +26,6 @@ function getYtDlpCommonArgs() {
         YOUTUBE_COOKIES,
         "--js-runtimes",
         `node:${NODE_PATH}`,
-        "--extractor-args",
         "--no-warnings",
         "--no-playlist"
     ];
