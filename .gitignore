@@ -6,3 +6,5 @@ database/random-events.json
 database/random-events.json.tmp
 database/StatsManager.json
 database/StatsManager.json.tmp
+database/stocks.json
+database/stocks.json.tmp
