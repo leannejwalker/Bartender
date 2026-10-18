@@ -167,7 +167,6 @@ class GuildMusic {
         this.current = nextTrack;
 
         try {
-            console.log("YT-DLP ARGS:", args);
             const ytDlp = spawn(
                 YTDLP_PATH,
                 [
